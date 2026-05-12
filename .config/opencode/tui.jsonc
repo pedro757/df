@@ -1,0 +1,19 @@
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "opencode",
+  "keybinds": {
+    "app_exit": "ctrl+c,<leader>q",
+    "messages_half_page_up": "ctrl+u",
+    "messages_half_page_down": "ctrl+d",
+    "input_newline": "shift+return,ctrl+return,alt+return",
+    "input_delete_to_line_end": "none",
+    "input_move_up": "up,ctrl+k",
+    "input_move_down": "down,ctrl+j",
+    "input_move_left": "left,ctrl+h",
+    "input_move_right": "right,ctrl+l",
+    "input_delete": "delete,shift+delete",
+    "input_select_up": "ctrl+k",
+    "input_select_down": "ctrl+j",
+    "session_list": "ctrl+s"
+  }
+}
