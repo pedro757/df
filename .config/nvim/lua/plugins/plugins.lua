@@ -651,56 +651,56 @@ return {
       })
     end,
   },
-  {
-    "NickvanDyke/opencode.nvim",
-    dependencies = {
-      { "folke/snacks.nvim", opts = { input = { enabled = true } } },
-    },
-    config = function()
-      local opencode_cmd = 'OPENCODE_EXPERIMENTAL_PLAN_MODE=1 opencode --hostname localhost --port 1234'
-      ---@type snacks.terminal.Opts
-      local snacks_terminal_opts = {
-        win = {
-          position = 'right',
-          enter = false,
-          on_win = function(win)
-            -- Set up keymaps and cleanup for an arbitrary terminal
-            require('opencode.terminal').setup(win.win)
-          end,
-        },
-      }
-      ---@type opencode.Opts
-      vim.g.opencode_opts = {
-        server = {
-          start = function()
-            require('snacks.terminal').open(opencode_cmd, snacks_terminal_opts)
-          end,
-          stop = function()
-            require('snacks.terminal').get(opencode_cmd, snacks_terminal_opts):close()
-          end,
-          toggle = function()
-            require('snacks.terminal').toggle(opencode_cmd, snacks_terminal_opts)
-          end,
-        },
-        events = {
-          enabled = false,
-        }
-      }
-
-      vim.opt.autoread = true
-
-      vim.keymap.set("n", "<leader>ot", function() require("opencode").toggle() end, { desc = "Toggle embedded" })
-      vim.keymap.set("n", "<leader>oa", function() require("opencode").ask("@this: ") end, { desc = "Ask AI about this" })
-      vim.keymap.set("v", "<leader>oa", function() require("opencode").ask("@this: ") end, { desc = "Ask AI about this" })
-      vim.keymap.set("n", "<leader>o+", function() require("opencode").prompt("@buffer", { append = true }) end, { desc = "Add buffer to prompt" })
-      vim.keymap.set("v", "<leader>o+", function() require("opencode").prompt("@this", { append = true }) end, { desc = "Add selection to prompt" })
-      vim.keymap.set("n", "<leader>oe", function() require("opencode").prompt("Explain @cursor and its context") end, { desc = "Explain this code" })
-      vim.keymap.set("n", "<leader>on", function() require("opencode").command("session_new") end, { desc = "New session" })
-      vim.keymap.set("n", "<S-C-u>", function() require("opencode").command("messages_half_page_up") end, { desc = "Messages half page up" })
-      vim.keymap.set("n", "<S-C-d>", function() require("opencode").command("messages_half_page_down") end, { desc = "Messages half page down" })
-      vim.keymap.set({ "n", "v" }, "<leader>os", function() require("opencode").select() end, { desc = "Select prompt" })
-    end,
-  },
+  -- {
+  --   "NickvanDyke/opencode.nvim",
+  --   dependencies = {
+  --     { "folke/snacks.nvim", opts = { input = { enabled = true } } },
+  --   },
+  --   config = function()
+  --     local opencode_cmd = 'OPENCODE_EXPERIMENTAL_PLAN_MODE=1 opencode --hostname localhost --port 1234'
+  --     ---@type snacks.terminal.Opts
+  --     local snacks_terminal_opts = {
+  --       win = {
+  --         position = 'right',
+  --         enter = false,
+  --         on_win = function(win)
+  --           -- Set up keymaps and cleanup for an arbitrary terminal
+  --           require('opencode.terminal').setup(win.win)
+  --         end,
+  --       },
+  --     }
+  --     ---@type opencode.Opts
+  --     vim.g.opencode_opts = {
+  --       server = {
+  --         start = function()
+  --           require('snacks.terminal').open(opencode_cmd, snacks_terminal_opts)
+  --         end,
+  --         stop = function()
+  --           require('snacks.terminal').get(opencode_cmd, snacks_terminal_opts):close()
+  --         end,
+  --         toggle = function()
+  --           require('snacks.terminal').toggle(opencode_cmd, snacks_terminal_opts)
+  --         end,
+  --       },
+  --       events = {
+  --         enabled = false,
+  --       }
+  --     }
+  --
+  --     vim.opt.autoread = true
+  --
+  --     vim.keymap.set("n", "<leader>ot", function() require("opencode").toggle() end, { desc = "Toggle embedded" })
+  --     vim.keymap.set("n", "<leader>oa", function() require("opencode").ask("@this: ") end, { desc = "Ask AI about this" })
+  --     vim.keymap.set("v", "<leader>oa", function() require("opencode").ask("@this: ") end, { desc = "Ask AI about this" })
+  --     vim.keymap.set("n", "<leader>o+", function() require("opencode").prompt("@buffer", { append = true }) end, { desc = "Add buffer to prompt" })
+  --     vim.keymap.set("v", "<leader>o+", function() require("opencode").prompt("@this", { append = true }) end, { desc = "Add selection to prompt" })
+  --     vim.keymap.set("n", "<leader>oe", function() require("opencode").prompt("Explain @cursor and its context") end, { desc = "Explain this code" })
+  --     vim.keymap.set("n", "<leader>on", function() require("opencode").command("session_new") end, { desc = "New session" })
+  --     vim.keymap.set("n", "<S-C-u>", function() require("opencode").command("messages_half_page_up") end, { desc = "Messages half page up" })
+  --     vim.keymap.set("n", "<S-C-d>", function() require("opencode").command("messages_half_page_down") end, { desc = "Messages half page down" })
+  --     vim.keymap.set({ "n", "v" }, "<leader>os", function() require("opencode").select() end, { desc = "Select prompt" })
+  --   end,
+  -- },
   {
     "lewis6991/gitsigns.nvim",
     event = "BufRead",

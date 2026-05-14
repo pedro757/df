@@ -151,3 +151,45 @@ local function accept_line()
 end
 
 m("i", "<C-e>", accept_line, { desc = "Accept suggestion" })
+
+local function copy_location(is_visual)
+  local ok, user_input = pcall(vim.fn.input, "Input (optional): ")
+  if not ok then
+    return
+  end
+
+  local full_path = vim.fn.expand("%:p")
+  local home = vim.fn.expand("~")
+  local path
+  if full_path:sub(1, #home) == home then
+    path = "~" .. full_path:sub(#home + 1)
+  else
+    path = full_path
+  end
+
+  local location
+  if is_visual then
+    local start_line = vim.fn.line("'<")
+    local end_line = vim.fn.line("'>")
+    if start_line == end_line then
+      location = string.format("%s:L%s", path, start_line)
+    else
+      location = string.format("%s:L%s-L%s", path, start_line, end_line)
+    end
+  else
+    local line = vim.fn.line(".")
+    local col = vim.fn.col(".")
+    location = string.format("%s:L%s:C%s", path, line, col)
+  end
+
+  if user_input ~= "" then
+    location = location .. "\n\n" .. user_input
+  end
+
+  vim.fn.setreg("+", location)
+  vim.fn.setreg('"', location)
+  vim.notify("Copied: " .. location, vim.log.levels.INFO)
+end
+
+m("n", "<leader>oa", function() copy_location(false) end, { desc = "Yank file location" })
+m("x", "<leader>oa", function() copy_location(true) end, { desc = "Yank file location range" })
