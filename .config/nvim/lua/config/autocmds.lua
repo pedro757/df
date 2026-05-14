@@ -100,6 +100,7 @@ au("FileType", {
     "harpoon",
     [[null-ls-info]],
     "lspinfo",
+    "snacks_input",
   },
   callback = function()
     map("n", "<c-c>", ":bd<cr>", buf_opts)

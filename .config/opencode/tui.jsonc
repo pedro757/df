@@ -14,6 +14,7 @@
     "input_delete": "delete,shift+delete",
     "input_select_up": "ctrl+k",
     "input_select_down": "ctrl+j",
-    "session_list": "ctrl+s"
+    "session_list": "ctrl+s",
+    "session_new": "<leader>n,ctrl+n",
   }
 }

@@ -211,7 +211,7 @@ return {
       end)
     end,
   },
-  { "nvim-mini/mini.icons",     version = false },
+  { "nvim-mini/mini.icons", version = false },
   { "nvim-mini/mini.bracketed", version = false },
   {
     "nvim-mini/mini.ai",
@@ -303,7 +303,7 @@ return {
     lazy = false,
     build = ":TSUpdate",
     config = function()
-      require'nvim-treesitter'.install {
+      require("nvim-treesitter").install({
         "rust",
         "javascript",
         "zig",
@@ -331,9 +331,9 @@ return {
         "vimdoc",
         "xml",
         "yaml",
-      }
+      })
 
-      vim.api.nvim_create_autocmd('FileType', {
+      vim.api.nvim_create_autocmd("FileType", {
         pattern = {
           "rust",
           "javascript",
@@ -366,8 +366,8 @@ return {
         callback = function()
           vim.treesitter.start()
           vim.bo.indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
-          vim.wo[0][0].foldexpr = 'v:lua.vim.treesitter.foldexpr()'
-          vim.wo[0][0].foldmethod = 'expr'
+          vim.wo[0][0].foldexpr = "v:lua.vim.treesitter.foldexpr()"
+          vim.wo[0][0].foldmethod = "expr"
         end,
       })
     end,
@@ -387,9 +387,9 @@ return {
   {
     "booperlv/nvim-gomove",
     keys = {
-      { "<A-h>", "<Plug>GoVSMLeft",  mode = "v" },
-      { "<A-j>", "<Plug>GoVSMDown",  mode = "v" },
-      { "<A-k>", "<Plug>GoVSMUp",    mode = "v" },
+      { "<A-h>", "<Plug>GoVSMLeft", mode = "v" },
+      { "<A-j>", "<Plug>GoVSMDown", mode = "v" },
+      { "<A-k>", "<Plug>GoVSMUp", mode = "v" },
       { "<A-l>", "<Plug>GoVSMRight", mode = "v" },
       { "<A-h>", "<Plug>GoNSMLeft" },
       { "<A-j>", "<Plug>GoNSMDown" },
@@ -913,11 +913,11 @@ return {
   {
     "lionyxml/gitlineage.nvim",
     config = function()
-        require("gitlineage").setup()
-    end
+      require("gitlineage").setup()
+    end,
   },
   {
-    'dmtrKovalenko/fff.nvim',
+    "dmtrKovalenko/fff.nvim",
     build = function()
       -- this will download prebuild binary or try to use existing rustup toolchain to build from source
       -- (if you are using lazy you can use gb for rebuilding a plugin if needed)
@@ -927,29 +927,29 @@ return {
     -- build = "nix run .#release",
     opts = { -- (optional)
       debug = {
-        enabled = true,     -- we expect your collaboration at least during the beta
+        enabled = true, -- we expect your collaboration at least during the beta
         show_scores = true, -- to help us optimize the scoring system, feel free to share your scores!
       },
       keymaps = {
-        close = { '<Esc>', '<C-c>' },
-        select = { '<CR>', '<C-l>' },
-        select_split = { '<C-s>', '<C-h>' },
-        select_vsplit = '<C-v>',
-        select_tab = '<C-t>',
+        close = { "<Esc>", "<C-c>" },
+        select = { "<CR>", "<C-l>" },
+        select_split = { "<C-s>", "<C-h>" },
+        select_vsplit = "<C-v>",
+        select_tab = "<C-t>",
         -- you can assign multiple keys to any action
-        move_up = { '<Up>', '<C-p>', '<C-k>' },
-        move_down = { '<Down>', '<C-n>', '<C-j>' },
-        preview_scroll_up = '<C-u>',
-        preview_scroll_down = '<C-d>',
-        toggle_debug = '<F2>',
+        move_up = { "<Up>", "<C-p>", "<C-k>" },
+        move_down = { "<Down>", "<C-n>", "<C-j>" },
+        preview_scroll_up = "<C-u>",
+        preview_scroll_down = "<C-d>",
+        toggle_debug = "<F2>",
         -- goes to the previous query in history
-        cycle_previous_query = '<C-Up>',
+        cycle_previous_query = "<C-Up>",
         -- multi-select keymaps for quickfix
-        toggle_select = '<Tab>',
-        send_to_quickfix = '<C-q>',
+        toggle_select = "<Tab>",
+        send_to_quickfix = "<C-q>",
         -- grep mode: cycle between plain text, regex, and fuzzy search
-        toggle_grep_regex = '<S-Tab>',
-      }
+        toggle_grep_regex = "<S-Tab>",
+      },
     },
     -- No need to lazy-load with lazy.nvim.
     -- This plugin initializes itself lazily.
@@ -957,23 +957,29 @@ return {
     keys = {
       {
         "<leader>f", -- try it if you didn't it is a banger keybinding for a picker
-        function() require('fff').find_files() end,
-        desc = 'FFFind files',
+        function()
+          require("fff").find_files()
+        end,
+        desc = "FFFind files",
       },
       {
         "<leader>w",
-        function() require('fff').live_grep() end,
-        desc = 'LiFFFe grep',
+        function()
+          require("fff").live_grep()
+        end,
+        desc = "LiFFFe grep",
       },
       {
         "fz",
-        function() require('fff').live_grep({
-          grep = {
-            modes = { 'fuzzy', 'plain' }
-          }
-        }) end,
-        desc = 'Live fffuzy grep',
-      }
-    }
+        function()
+          require("fff").live_grep({
+            grep = {
+              modes = { "fuzzy", "plain" },
+            },
+          })
+        end,
+        desc = "Live fffuzy grep",
+      },
+    },
   },
 }
