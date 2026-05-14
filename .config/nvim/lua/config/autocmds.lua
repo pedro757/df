@@ -96,6 +96,16 @@ au("FileType", {
 
 au("FileType", {
   pattern = {
+    "snacks_input",
+  },
+  callback = function()
+    map({ "i", "n" }, "<c-x>", ":bd<cr>", buf_opts)
+  end,
+  group = HelpMappings,
+})
+
+au("FileType", {
+  pattern = {
     "startuptime",
     "harpoon",
     [[null-ls-info]],
