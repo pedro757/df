@@ -26,8 +26,6 @@ window-inherit-working-directory = false
 # Keyboard bindings
 keybind = shift+insert=paste_from_clipboard
 keybind = control+insert=copy_to_clipboard
-keybind = ctrl+d=scroll_page_down
-keybind = ctrl+u=scroll_page_up
 keybind = super+control+shift+alt+arrow_down=resize_split:down,100
 keybind = super+control+shift+alt+arrow_up=resize_split:up,100
 keybind = super+control+shift+alt+arrow_left=resize_split:left,100
