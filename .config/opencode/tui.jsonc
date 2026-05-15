@@ -16,5 +16,6 @@
     "input_select_down": "ctrl+j",
     "session_list": "ctrl+s",
     "session_new": "<leader>n,ctrl+n",
+    "variant_list": "<leader>v",
   }
 }

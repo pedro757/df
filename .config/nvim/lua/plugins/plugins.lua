@@ -969,17 +969,17 @@ return {
         end,
         desc = "LiFFFe grep",
       },
-      {
-        "fz",
-        function()
-          require("fff").live_grep({
-            grep = {
-              modes = { "fuzzy", "plain" },
-            },
-          })
-        end,
-        desc = "Live fffuzy grep",
-      },
+      -- {
+      --   "fz",
+      --   function()
+      --     require("fff").live_grep({
+      --       grep = {
+      --         modes = { "fuzzy", "plain" },
+      --       },
+      --     })
+      --   end,
+      --   desc = "Live fffuzy grep",
+      -- },
     },
   },
 }
