@@ -144,9 +144,9 @@ au("FileType", {
 
 local HighlightYank = aug("HighlightYank", clear)
 
-au("TextYankPost", {
+au({ "TextYankPost", "TextPutPost" }, {
   callback = function()
-    vim.highlight.on_yank { timeout = 300 }
+    vim.hl.hl_op {higroup='Search', timeout=300}
   end,
   group = HighlightYank,
 })
