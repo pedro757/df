@@ -4,10 +4,13 @@
   "permission": {
     "bash": {
       "*": "ask",
+      "mkdir *": "allow",
+      "ls *": "allow",
       "git *": "allow",
       "git branch *": "deny",
       "git push *": "deny",
-      "pnpm -F nextjs typecheck": "allow",
+      "pnpm typecheck *": "allow",
+      "pnpm -F * typecheck *": "allow",
       "pnpm format:fix *": "allow",
     }
   },

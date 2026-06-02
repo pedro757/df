@@ -5,8 +5,8 @@
 	br = branch
 	ci = commit
 	st = status
-	lod = log --oneline --decorate
-	lodag = log --oneline --decorate --all --graph
+	lod = log --pretty=format:'%C(auto)%h %C(green)%ad%C(auto)%d %s' --date=format:'%d/%m/%Y'
+	lodag = log --graph --all --pretty=format:'%C(auto)%h %C(green)%ad%C(auto)%d %s' --date=format:'%d/%m/%Y'
 [init]
 	defaultBranch = master
 [pull]
