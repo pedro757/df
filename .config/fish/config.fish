@@ -3,6 +3,7 @@ set fish_greeting
 alias vim="nvim"
 alias old_vim="\vim"
 alias dcompose="docker-compose"
+alias oc="OPENCODE_EXPERIMENTAL=1 opencode"
 alias dotfiles='/usr/bin/git --git-dir=$HOME/.dotfiles --work-tree=$HOME/'
 alias la='exa --long --icons --git -a'
 alias ll='exa --long --icons --git'

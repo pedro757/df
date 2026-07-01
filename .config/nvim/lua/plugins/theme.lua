@@ -1,15 +1,71 @@
 return {
   -- { "tahayvr/matteblack.nvim", lazy = false, priority = 1000, config = function() vim.cmd.colorscheme "matteblack" end },
-  -- { "ellisonleao/gruvbox.nvim", lazy = false, priority = 1000, config = function() vim.cmd.colorscheme "gruvbox" end },
-  {
-    "ember-theme/nvim",
-    name = "ember",
-    priority = 1000,
-    config = function()
-      require("ember").setup({
-        variant = "ember", -- "ember" | "ember-soft" | "ember-light"
-      })
-      vim.cmd("colorscheme ember")
-    end,
-  }
+  { "ellisonleao/gruvbox.nvim", lazy = false, priority = 1000, config = function() vim.cmd.colorscheme "gruvbox" end },
+  -- {
+  --   "ember-theme/nvim",
+  --   name = "ember",
+  --   priority = 1000,
+  --   config = function()
+  --     require("ember").setup({
+  --       variant = "ember", -- "ember" | "ember-soft" | "ember-light"
+  --     })
+  --     vim.cmd("colorscheme ember")
+  --   end,
+  -- }
+  -- {
+  --   "bjarneo/hackerman.nvim",
+  --   dependencies = { "bjarneo/aether.nvim" }, -- Ensure aether is loaded first
+  --   priority = 1000,
+  --   config = function()
+  --     vim.cmd("colorscheme hackerman")
+  --   end,
+  -- },
+-- {
+--     "gthelding/monokai-pro.nvim",
+--     config = function()
+--       require("monokai-pro").setup({
+--         filter = "ristretto",
+--         override = function()
+--           return {
+--             NonText = { fg = "#948a8b" },
+--             MiniIconsGrey = { fg = "#948a8b" },
+--             MiniIconsRed = { fg = "#fd6883" },
+--             MiniIconsBlue = { fg = "#85dacc" },
+--             MiniIconsGreen = { fg = "#adda78" },
+--             MiniIconsYellow = { fg = "#f9cc6c" },
+--             MiniIconsOrange = { fg = "#f38d70" },
+--             MiniIconsPurple = { fg = "#a8a9eb" },
+--             MiniIconsAzure = { fg = "#a8a9eb" },
+--             MiniIconsCyan = { fg = "#85dacc" }, -- same value as MiniIconsBlue for consistency
+--           }
+--         end,
+--       })
+--       vim.cmd([[colorscheme monokai-pro]])
+--     end,
+--   }
+  -- {
+  --   "ribru17/bamboo.nvim",
+  --   priority = 1000,
+  --   config = function()
+  --     vim.cmd("colorscheme bamboo")
+  --   end,
+  -- },
+  -- {
+  --   "bjarneo/vantablack.nvim",
+  --   priority = 1000,
+  --   config = function()
+  --     vim.cmd("colorscheme vantablack")
+  --     vim.api.nvim_set_hl(0, "Visual", { bg = "#343434" })
+  --     vim.api.nvim_set_hl(
+  --       0,
+  --       "IncSearch",
+  --       { bg = "#a0a0a0", fg = "#0d0d0d", bold = true }
+  --     )
+  --     vim.api.nvim_set_hl(
+  --       0,
+  --       "Search",
+  --       { bg = "#a0a0a0", fg = "#0d0d0d", underline = true }
+  --     )
+  --   end,
+  -- },
 }
