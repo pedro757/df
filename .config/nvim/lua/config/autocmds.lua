@@ -9,7 +9,7 @@ local HelpMappings = aug("HelpMappings", clear)
 au("FileType", {
   pattern = "help",
   callback = function()
-    vim.cmd [[ nnoremap <buffer> s /\|\zs\S\+\ze\|<CR>]]
+    vim.cmd([[ nnoremap <buffer> s /\|\zs\S\+\ze\|<CR>]])
   end,
   group = HelpMappings,
 })
@@ -17,7 +17,7 @@ au("FileType", {
 au("FileType", {
   pattern = "help",
   callback = function()
-    vim.cmd [[nnoremap <buffer> S ?\|\zs\S\+\ze\|<CR>]]
+    vim.cmd([[nnoremap <buffer> S ?\|\zs\S\+\ze\|<CR>]])
   end,
   group = HelpMappings,
 })
@@ -146,7 +146,7 @@ local HighlightYank = aug("HighlightYank", clear)
 
 au({ "TextYankPost", "TextPutPost" }, {
   callback = function()
-    vim.hl.hl_op {higroup='Search', timeout=300}
+    vim.hl.hl_op({ higroup = "Search", timeout = 300 })
   end,
   group = HighlightYank,
 })
@@ -155,9 +155,9 @@ local StopNewlineComments = aug("StopNewlineComments", clear)
 
 au("BufEnter", {
   callback = function()
-    vim.opt.formatoptions:remove "c"
-    vim.opt.formatoptions:remove "r"
-    vim.opt.formatoptions:remove "o"
+    vim.opt.formatoptions:remove("c")
+    vim.opt.formatoptions:remove("r")
+    vim.opt.formatoptions:remove("o")
   end,
   group = StopNewlineComments,
 })
@@ -167,8 +167,8 @@ local TrimSpaces = aug("TrimSpaces", clear)
 au("BufWritePre", {
   callback = function()
     local curpos = vim.api.nvim_win_get_cursor(0)
-    vim.cmd [[:keepjumps keeppatterns %s/\s\+$//e]]
-    vim.cmd [[:keepjumps keeppatterns silent! 0;/^\%(\n*.\)\@!/,$d]]
+    vim.cmd([[:keepjumps keeppatterns %s/\s\+$//e]])
+    vim.cmd([[:keepjumps keeppatterns silent! 0;/^\%(\n*.\)\@!/,$d]])
     local end_row = vim.api.nvim_buf_line_count(0)
     if curpos[1] > end_row then
       curpos[1] = end_row
@@ -215,7 +215,7 @@ au("BufWritePre", {
     if vim.o.filetype == "oil" or vim.o.filetype == "fugitive" then
       return
     end
-    local dir = vim.fn.expand "<afile>:p:h"
+    local dir = vim.fn.expand("<afile>:p:h")
     if vim.fn.isdirectory(dir) == 0 then
       vim.fn.mkdir(dir, "p")
     end
@@ -239,8 +239,8 @@ cmd("DiffSaved", function()
 end, {})
 cmd("Dotfiles", "call FugitiveDetect(expand('~/.dotfiles'))", {})
 cmd("Worktree", function()
-  require("telescope").extensions.git_worktree.git_worktrees()
-end, {})
+  require("config.worktree").open_menu()
+end, { desc = "Open git worktree menu" })
 
 -- listen lsp-progress event and refresh lualine
 vim.api.nvim_create_augroup("lualine_augroup", { clear = true })
@@ -255,7 +255,7 @@ local BigFile = aug("BigFile", clear)
 au("BufEnter", {
   callback = function()
     if vim.o.filetype == "bigfile" then
-      vim.cmd [[SupermavenStop]]
+      vim.cmd([[SupermavenStop]])
     end
   end,
   group = BigFile,
@@ -263,7 +263,7 @@ au("BufEnter", {
 au("BufLeave", {
   callback = function()
     if vim.o.filetype == "bigfile" then
-      vim.cmd [[SupermavenStart]]
+      vim.cmd([[SupermavenStart]])
     end
   end,
   group = BigFile,
@@ -276,3 +276,49 @@ vim.api.nvim_create_autocmd("FileType", {
     vim.opt_local.wrapmargin = 80
   end,
 })
+
+-- Layout-preserving buffer delete function
+local function smart_bd(opts)
+  local force = opts.bang and "!" or ""
+  local target_buf = vim.api.nvim_get_current_buf()
+
+  -- Check unsaved changes if not using !
+  if not opts.bang and vim.bo[target_buf].modified then
+    vim.api.nvim_echo(
+      { { "E89: No write since last change (add ! to override)", "ErrorMsg" } },
+      true,
+      {}
+    )
+    return
+  end
+
+  -- Switch buffer in the current window before deleting
+  local alt_buf = vim.fn.bufnr("#")
+  if
+      alt_buf > 0
+      and vim.api.nvim_buf_is_valid(alt_buf)
+      and vim.bo[alt_buf].buflisted
+  then
+    vim.cmd("buffer " .. alt_buf)
+  else
+    vim.cmd("bprevious")
+  end
+
+  -- Delete target buffer
+  if vim.api.nvim_get_current_buf() ~= target_buf then
+    vim.cmd("bdelete" .. force .. " " .. target_buf)
+  else
+    vim.cmd("enew | bdelete" .. force .. " " .. target_buf)
+  end
+end
+
+-- Command abbreviations to hook into :bd and :bw without breaking muscle memory
+vim.cmd([[
+  cnoreabbrev <expr> bd (getcmdtype() == ':' && getcmdline() ==# 'bd') ? 'SmartBD' : 'bd'
+  cnoreabbrev <expr> bd! (getcmdtype() == ':' && getcmdline() ==# 'bd!') ? 'SmartBD!' : 'bd!'
+  cnoreabbrev <expr> bw (getcmdtype() == ':' && getcmdline() ==# 'bw') ? 'SmartBD' : 'bw'
+  cnoreabbrev <expr> bw! (getcmdtype() == ':' && getcmdline() ==# 'bw!') ? 'SmartBD!' : 'bw!'
+]])
+
+-- Register custom command
+vim.api.nvim_create_user_command("SmartBD", smart_bd, { bang = true })

@@ -194,3 +194,4 @@ end
 
 m("n", "<leader>oa", function() copy_location(false) end, { desc = "Yank file location" })
 m("x", "<leader>oa", function() copy_location(true) end, { desc = "Yank file location range" })
+m("n", "<leader>gw", function() require("config.worktree").open_menu() end, { desc = "Git Worktrees" })

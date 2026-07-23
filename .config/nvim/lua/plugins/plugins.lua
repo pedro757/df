@@ -204,6 +204,18 @@ return {
     },
   },
   {
+    "ThePrimeagen/git-worktree.nvim",
+    opts = {
+      change_directory_command = "tcd",
+      update_on_change = false,
+    },
+    config = function(_, opts)
+      local git_worktree = require("git-worktree")
+      git_worktree.setup(opts)
+      require("config.worktree").setup(git_worktree)
+    end,
+  },
+  {
     "ThePrimeagen/harpoon",
     branch = "harpoon2",
     dependencies = {
@@ -833,7 +845,7 @@ return {
           )
           map(
             "n",
-            "<leader>gw",
+            "<leader>gV",
             gs.toggle_word_diff,
             { desc = "Toggle Word Diff" }
           )
