@@ -301,7 +301,11 @@ local function smart_bd(opts)
   then
     vim.cmd("buffer " .. alt_buf)
   else
-    vim.cmd("bprevious")
+    local switched = pcall(vim.cmd, "bprevious")
+    if not switched then
+      local empty_buf = vim.api.nvim_create_buf(true, false)
+      vim.api.nvim_win_set_buf(0, empty_buf)
+    end
   end
 
   -- Delete target buffer
