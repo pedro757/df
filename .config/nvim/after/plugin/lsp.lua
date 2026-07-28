@@ -52,6 +52,9 @@ null_ls.setup({
 -- vim.api.nvim_create_user_command("NullLsStop", null_ls_stop, {})
 
 vim.lsp.enable("lua_ls")
+vim.lsp.config("tsgo", {
+  cmd = { "tsgo", "--lsp", "--stdio" },
+})
 vim.lsp.enable("tsgo")
 vim.lsp.enable("emmet_language_server")
 vim.lsp.enable("marksman")
@@ -87,9 +90,9 @@ vim.lsp.config("tailwindcss", {
         "class:list",
         "classList",
         "ngClass",
-        "\\w+[Cc]lass=\"([^\"]*)",
+        '\\w+[Cc]lass="([^"]*)',
         "\\w+[Cc]lass='([^']*)",
-        "\\w+[Cc]lassName=\"([^\"]*)",
+        '\\w+[Cc]lassName="([^"]*)',
         "\\w+[Cc]lassName='([^']*)",
       },
       classFunctions = {

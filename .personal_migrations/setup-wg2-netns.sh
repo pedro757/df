@@ -99,7 +99,7 @@ done
 id "$targetUser" &>/dev/null || die "User not found: $targetUser"
 [[ $dnsServer =~ ^[0-9A-Fa-f:.]+$ ]] || die "Invalid DNS server address: $dnsServer"
 
-for commandName in ip wg wg-quick systemctl install getent runuser setpriv stat sudo visudo; do
+for commandName in ip wg wg-quick systemctl install getent mount runuser setpriv stat sudo visudo; do
   requireCommand "$commandName"
 done
 
@@ -255,6 +255,13 @@ set -eu
 
 namespace=wg2
 callingUser=${SUDO_USER-}
+insideNamespace=false
+
+if [ "${1-}" = --inside-namespace ]; then
+  insideNamespace=true
+  shift
+fi
+
 environmentFile=${1-}
 shift || true
 
@@ -276,9 +283,18 @@ esac
 fileMetadata=$(LC_ALL=C /usr/bin/stat -c '%u:%a:%F' -- "$environmentFile")
 [ "$fileMetadata" = "$userId:600:regular file" ] || { printf 'Invalid environment file\n' >&2; exit 1; }
 
-exec /usr/bin/ip netns exec "$namespace" /usr/bin/runuser -u "$callingUser" -- \
-  /usr/bin/env -i /usr/local/libexec/wg2-user-exec \
-  "$environmentFile" "$@"
+if [ "$insideNamespace" = true ]; then
+  if [ "$(/usr/bin/stat -fc %T -- /sys/fs/cgroup)" != cgroup2fs ]; then
+    /usr/bin/mount -t cgroup2 -o nosuid,nodev,noexec cgroup2 /sys/fs/cgroup
+  fi
+
+  exec /usr/bin/runuser -u "$callingUser" -- \
+    /usr/bin/env -i /usr/local/libexec/wg2-user-exec \
+    "$environmentFile" "$@"
+fi
+
+exec /usr/bin/ip netns exec "$namespace" \
+  "$0" --inside-namespace "$environmentFile" "$@"
 ENTER_SCRIPT
 
 cat > "$temporaryDirectory/wg2-user-exec" <<'USER_EXEC_SCRIPT'

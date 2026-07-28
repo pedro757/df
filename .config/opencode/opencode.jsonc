@@ -83,16 +83,6 @@
     //   }
     // },
   },
-  "lsp": {
-    "typescript": {
-      "disabled": false,
-      "command": [
-        "tsgo",
-        "--lsp",
-        "--stdio"
-      ]
-    }
-  },
   "experimental": {
     "continue_loop_on_deny": true,
   },
