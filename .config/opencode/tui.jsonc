@@ -17,5 +17,8 @@
     "session_list": "ctrl+s",
     "session_new": "<leader>n,ctrl+n",
     "variant_list": "<leader>v",
+    "dialog.select.prev": "up,ctrl+p,ctrl+k",
+    "dialog.select.next": "down,ctrl+n,ctrl+j",
+    "dialog.select.submit": "return,ctrl+l",
   }
 }
