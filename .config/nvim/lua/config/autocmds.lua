@@ -308,11 +308,18 @@ local function smart_bd(opts)
     end
   end
 
-  -- Delete target buffer
-  if vim.api.nvim_get_current_buf() ~= target_buf then
+  -- :bprevious can succeed without switching when there is no other buffer.
+  if vim.api.nvim_get_current_buf() == target_buf then
+    local empty_buf = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_win_set_buf(0, empty_buf)
+  end
+
+  -- Temporary buffers (such as Fugitive views) may delete or wipe themselves on leave.
+  if
+      vim.api.nvim_buf_is_valid(target_buf)
+      and (vim.api.nvim_buf_is_loaded(target_buf) or vim.bo[target_buf].buflisted)
+  then
     vim.cmd("bdelete" .. force .. " " .. target_buf)
-  else
-    vim.cmd("enew | bdelete" .. force .. " " .. target_buf)
   end
 end
 

@@ -567,7 +567,8 @@ return {
     },
   },
   {
-    "folke/flash.nvim",
+    "pedro757/flash.nvim",
+    branch = "fix/neovim-0.13-search-state",
     event = "VeryLazy",
     opts = {},
     keys = {
