@@ -1,36 +1,28 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "small_model": "openai/gpt-5-nano",
+  "agents": {
+    "title": {
+      "model": "openai/gpt-5.6-luna"
+    }
+  },
   "autoupdate": true,
-  "permission": {
-    "bash": {
-      "*": "allow",
-      "git push *": "deny",
-      "rm -rf /": "deny"
-    }
-  },
-  "agent": {
-    "explore": {
-      "model": "openai/gpt-5.6-terra",
-      "variant": "xhigh"
-    },
-    "general": {
-      "model": "openai/gpt-5.6-terra",
-      "variant": "xhigh"
-    }
-  },
-  "provider": {
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "allow" },
+    { "action": "shell", "resource": "git push *", "effect": "ask" },
+    { "action": "shell", "resource": "rm -rf /", "effect": "deny" }
+  ],
+  "providers": {
     "openrouter": {
       "models": {
         "openai/gpt-5.4": {
           "name": "GPT-5.4 custom",
-          "options": {
+          "settings": {
             "service_tier": "flex"
           }
         },
         "openai/gpt-5.5": {
           "name": "GPT-5.5 custom",
-          "options": {
+          "settings": {
             "service_tier": "flex"
           }
         },
@@ -43,59 +35,75 @@
     //   "models": {
     //     "gpt-5.6-sol": {
     //       "name": "GPT-5.6 Sol custom",
-    //       "options": {
+    //       "settings": {
     //         "service_tier": "flex"
     //       },
-    //       "variants": {
-    //         "low": {},
-    //         "medium": {},
-    //         "high": {},
-    //         "xhigh": {},
-    //         "max": {}
-    //       }
+    //       "variants": [
+    //         { "id": "low" },
+    //         { "id": "medium" },
+    //         { "id": "high" },
+    //         { "id": "xhigh" },
+    //         { "id": "max" }
+    //       ]
     //     },
     //     "gpt-5.6-terra": {
     //       "name": "GPT-5.6 Terra custom",
-    //       "options": {
+    //       "settings": {
     //         "service_tier": "flex"
     //       },
-    //       "variants": {
-    //         "low": {},
-    //         "medium": {},
-    //         "high": {},
-    //         "xhigh": {},
-    //         "max": {}
-    //       }
+    //       "variants": [
+    //         { "id": "low" },
+    //         { "id": "medium" },
+    //         { "id": "high" },
+    //         { "id": "xhigh" },
+    //         { "id": "max" }
+    //       ]
     //     },
     //     "gpt-5.6-luna": {
     //       "name": "GPT-5.6 Luna custom",
-    //       "options": {
+    //       "settings": {
     //         "service_tier": "flex"
     //       },
-    //       "variants": {
-    //         "low": {},
-    //         "medium": {},
-    //         "high": {},
-    //         "xhigh": {},
-    //         "max": {}
-    //       }
+    //       "variants": [
+    //         { "id": "low" },
+    //         { "id": "medium" },
+    //         { "id": "high" },
+    //         { "id": "xhigh" },
+    //         { "id": "max" }
+    //       ]
     //     },
     //   }
     // },
   },
-  "experimental": {
-    "continue_loop_on_deny": true,
-  },
-  "plugin": ["@mohak34/opencode-notifier@latest"]
+  "lsp": {
+    "custom-typescript": {
+      "command": [
+        "tsc",
+        "--lsp",
+        "--stdio"
+      ],
+      "extensions": [".ts", ".tsx"],
+      "env": {
+        "TSS_LOG": "-level verbose"
+      },
+      "initialization": {
+        "preferences": {
+          "importModuleSpecifierPreference": "relative"
+        }
+      }
+    }
+  }
   // "mcp": {
-  //   "react-grab-mcp": {
-  //     "type": "local",
-  //     "command": [
-  //       "npx",
-  //       "-y",
-  //       "@react-grab/mcp",
-  //       "--stdio"
-  //     ]
+  //   "servers": {
+  //     "react-grab-mcp": {
+  //       "type": "local",
+  //       "command": [
+  //         "npx",
+  //         "-y",
+  //         "@react-grab/mcp",
+  //         "--stdio"
+  //       ]
+  //     }
   //   }
   // }
 }
