@@ -1,3 +1,4 @@
+require("config.remote_clipboard").setup()
 local opt = vim.opt
 opt.completeopt = "menu,menuone,noselect"
 opt.wrap = false

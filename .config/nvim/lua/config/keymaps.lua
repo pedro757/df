@@ -160,8 +160,11 @@ local function copy_location(is_visual)
 
     local full_path = vim.fn.expand("%:p")
     local home = vim.fn.expand("~")
+    local repo_root = vim.fs.root(full_path, ".git")
     local path
-    if full_path:sub(1, #home) == home then
+    if repo_root then
+      path = vim.fs.relpath(repo_root, full_path)
+    elseif full_path:sub(1, #home) == home then
       path = "~" .. full_path:sub(#home + 1)
     else
       path = full_path

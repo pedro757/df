@@ -52,10 +52,7 @@ null_ls.setup({
 -- vim.api.nvim_create_user_command("NullLsStop", null_ls_stop, {})
 
 vim.lsp.enable("lua_ls")
-vim.lsp.config("tsgo", {
-  cmd = { "tsgo", "--lsp", "--stdio" },
-})
-vim.lsp.enable("tsgo")
+vim.lsp.enable("tsc")
 vim.lsp.enable("emmet_language_server")
 vim.lsp.enable("marksman")
 vim.lsp.enable("dockerls")
