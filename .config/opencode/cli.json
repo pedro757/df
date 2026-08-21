@@ -37,7 +37,7 @@
     "prompt.autocomplete.prev": "up,ctrl+p,ctrl+k",
     "prompt.autocomplete.next": "down,ctrl+n,ctrl+j",
     "prompt.autocomplete.select": "return,ctrl+l",
-    "session.sidebar.toggle": "ctrl+b"
+    "session.sidebar.toggle": "<leader>b"
   },
   "plugins": [
     "-opencode.notifications"
