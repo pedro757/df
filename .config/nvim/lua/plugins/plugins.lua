@@ -48,7 +48,10 @@ return {
     },
     dependencies = { "nvim-tree/nvim-web-devicons" },
   },
-  "tpope/vim-fugitive",
+  {
+    dir = "/home/pedro/Documents/vim-fugitive",
+    name = "vim-fugitive",
+  },
   "tpope/vim-repeat",
   "tpope/vim-sleuth",
   {
@@ -567,8 +570,7 @@ return {
     },
   },
   {
-    "pedro757/flash.nvim",
-    branch = "fix/neovim-0.13-search-state",
+    "folke/flash.nvim",
     event = "VeryLazy",
     opts = {},
     keys = {
@@ -1026,4 +1028,9 @@ return {
       -- },
     },
   },
+  {
+    "akinsho/git-conflict.nvim",
+    version = "*",
+    config = true
+  }
 }

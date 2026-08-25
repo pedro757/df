@@ -46,6 +46,7 @@ set PATH $HOME/go/bin $PATH
 
 set -x EDITOR nvim
 set -x FZF_DEFAULT_COMMAND "fd --type f --hidden --follow --exclude .git"
+set -gx FZF_DEFAULT_OPTS "$FZF_DEFAULT_OPTS --bind=ctrl-j:down,ctrl-k:up"
 set -gx GPG_TTY (tty)
 
 # set --global tide_character_icon "➜"

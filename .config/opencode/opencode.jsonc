@@ -8,7 +8,6 @@
   "autoupdate": true,
   "permissions": [
     { "action": "shell", "resource": "*", "effect": "allow" },
-    { "action": "shell", "resource": "git push *", "effect": "ask" },
     { "action": "shell", "resource": "rm -rf /", "effect": "deny" }
   ],
   "providers": {
