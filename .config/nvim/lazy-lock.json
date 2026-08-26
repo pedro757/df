@@ -4,7 +4,7 @@
   "blink.lib": { "branch": "main", "commit": "c8fdc12c8a2fab6cf786dd7141a283f8079f902b" },
   "blink.pairs": { "branch": "main", "commit": "aad9046bc4670dc91301cd62a6948feb36c55f4a" },
   "ergoterm.nvim": { "branch": "main", "commit": "d1a8f7bf99024797962f699298b07a4ec57a652b" },
-  "fff.nvim": { "branch": "main", "commit": "6020063092ce24212a7656d101bda8a521f2a09e" },
+  "fff.nvim": { "branch": "main", "commit": "c642d0743da5b830e22b3aefa2977c366604950e" },
   "flash.nvim": { "branch": "main", "commit": "5f0f270fdc7c5b0c21d903ee85b9cb06f2ac636a" },
   "friendly-snippets": { "branch": "main", "commit": "6cd7280adead7f586db6fccbd15d2cac7e2188b9" },
   "garbage-day.nvim": { "branch": "main", "commit": "225b715cf7e502977e5e040219cf5009eed70ee1" },
