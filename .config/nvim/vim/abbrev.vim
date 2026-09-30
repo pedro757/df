@@ -31,6 +31,8 @@ cnoreabbrev Phs push
 cnoreabbrev Psh push
 cnoreabbrev psh push
 cnoreabbrev pll pull
+cnoreabbrev Bw bw
+cnoreabbrev Bd bd
 
 inoreabbrev reutnr return
 inoreabbrev reuntr return
