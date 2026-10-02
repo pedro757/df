@@ -1,5 +1,6 @@
 local M = {}
 local did_setup = false
+local menu_win
 
 local function normalize_path(path)
   if not path or path == "" then
@@ -248,6 +249,9 @@ local function menu_lines(worktrees, current_root)
     local marker = worktree.path == current_root and "*" or " "
     local path = vim.fn.fnamemodify(worktree.path, ":~")
     local line = string.format("%s %-" .. branch_width .. "s  %s", marker, worktree.branch, path)
+    if vim.fn.isdirectory(worktree.path) ~= 1 then
+      line = line .. " [missing]"
+    end
     table.insert(lines, line)
   end
 
@@ -255,6 +259,11 @@ local function menu_lines(worktrees, current_root)
 end
 
 function M.open_menu()
+  if menu_win and vim.api.nvim_win_is_valid(menu_win) then
+    vim.api.nvim_set_current_win(menu_win)
+    return
+  end
+
   local git_worktree = require("git-worktree")
   local output = vim.fn.systemlist({ "git", "worktree", "list", "--porcelain" })
   if vim.v.shell_error ~= 0 then
@@ -300,6 +309,7 @@ function M.open_menu()
     row = row,
     col = col,
   })
+  menu_win = win
 
   vim.wo[win].cursorline = true
   vim.wo[win].number = false
@@ -314,6 +324,7 @@ function M.open_menu()
   end
 
   local pending_delete
+  local deleting = false
 
   local function set_menu_line(line, text)
     if not vim.api.nvim_buf_is_valid(buf) then
@@ -333,8 +344,40 @@ function M.open_menu()
     end
   end
 
+  local function refresh_menu(selected_line)
+    if not vim.api.nvim_win_is_valid(win) or not vim.api.nvim_buf_is_valid(buf) then
+      return
+    end
+
+    local refreshed = vim.fn.systemlist({ "git", "worktree", "list", "--porcelain" })
+    if vim.v.shell_error ~= 0 then
+      set_menu_line(selected_line, lines[selected_line])
+      vim.notify(table.concat(refreshed, "\n"), vim.log.levels.ERROR)
+      return
+    end
+
+    worktrees = parse_worktrees(refreshed)
+    if #worktrees == 0 then
+      close_menu()
+      return
+    end
+
+    lines = menu_lines(worktrees, get_current_root())
+    vim.bo[buf].modifiable = true
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+    vim.bo[buf].modifiable = false
+    local new_height = math.min(#lines, math.max(vim.o.lines - 6, 1))
+    vim.api.nvim_win_set_config(win, {
+      relative = "editor",
+      height = new_height,
+      row = math.max(math.floor((vim.o.lines - new_height) / 2) - 1, 0),
+      col = col,
+    })
+    vim.api.nvim_win_set_cursor(win, { math.min(selected_line, #worktrees), 0 })
+  end
+
   local function delete_selected()
-    if not vim.api.nvim_win_is_valid(win) then
+    if deleting or not vim.api.nvim_win_is_valid(win) then
       return
     end
 
@@ -357,18 +400,40 @@ function M.open_menu()
       return
     end
 
-    close_menu()
-    git_worktree.delete_worktree(worktree.path)
+    clear_pending_delete()
+    deleting = true
+    set_menu_line(line, "Deleting " .. worktree.branch .. "...")
+    git_worktree.delete_worktree(worktree.path, false, {
+      on_success = function()
+        deleting = false
+        refresh_menu(line)
+      end,
+      on_failure = vim.schedule_wrap(function()
+        deleting = false
+        set_menu_line(line, lines[line])
+      end),
+    })
   end
 
   local function switch_selected()
-    if not vim.api.nvim_win_is_valid(win) then
+    if deleting or not vim.api.nvim_win_is_valid(win) then
       return
     end
 
     local line = vim.api.nvim_win_get_cursor(win)[1]
     local worktree = worktrees[line]
     if not worktree then
+      return
+    end
+
+    if vim.fn.isdirectory(worktree.path) ~= 1 then
+      clear_pending_delete()
+      vim.notify(
+        "Worktree directory is missing: "
+          .. worktree.path
+          .. "\nIf it was permanently deleted, review stale entries with `git worktree prune --dry-run`.",
+        vim.log.levels.WARN
+      )
       return
     end
 

@@ -36,6 +36,7 @@ m("n", "<c-k>", "<c-w>k")
 m("n", "<c-j>", "<c-w>j")
 m("n", "<c-l>", "<c-w>l")
 m("n", "<c-h>", "<c-w>h")
+m("n", "gq", "<Cmd>quit<CR>", { silent = true, desc = "Quit window" })
 
 m({ "i", "c" }, "<c-h>", "<left>")
 m("i", "<c-l>", "<right>")
