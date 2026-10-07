@@ -1,0 +1,37 @@
+-- Read the theme background on each reload (Omarchy reloads after theme changes).
+local inactive_border_color
+local theme_colors = io.open(os.getenv("HOME") .. "/.local/state/omarchy/current/theme/colors.toml", "r")
+if theme_colors then
+  for line in theme_colors:lines() do
+    local background = line:match([=[^%s*background%s*=%s*["'](#%x%x%x%x%x%x)["']]=])
+    if background then
+      inactive_border_color = background
+      break
+    end
+  end
+  theme_colors:close()
+end
+
+hl.config({
+  general = {
+    gaps_in = 0,
+    gaps_out = 0,
+    border_size = 2,
+    col = {
+      inactive_border = inactive_border_color,
+    },
+    layout = "scrolling",
+  },
+  scrolling = {
+    column_width = 0.5,
+  },
+  cursor = {
+    warp_on_change_workspace = 0,
+  },
+})
+
+-- Keep border width fixed when focus changes; highlight only the active window.
+-- Single-window workspaces still have no border.
+o.window({ workspace = "w[1]" }, { border_size = 0 })
+
+hl.animation({ leaf = "windowsMove", enabled = true, speed = 2, bezier = "easeOutQuint" })

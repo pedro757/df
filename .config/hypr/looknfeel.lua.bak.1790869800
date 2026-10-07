@@ -1,0 +1,21 @@
+hl.config({
+  general = {
+    gaps_in = 0,
+    gaps_out = 0,
+    border_size = 0,
+    layout = "scrolling",
+  },
+  scrolling = {
+    column_width = 0.5,
+  },
+  cursor = {
+    warp_on_change_workspace = 0,
+  },
+})
+
+-- Only the focused window gets a border, and only with 2+ workspace windows.
+o.window({ focus = true }, { border_size = 2 })
+o.window({ focus = false }, { border_size = 0 })
+o.window({ workspace = "w[1]" }, { border_size = 0 })
+
+hl.animation({ leaf = "windowsMove", enabled = true, speed = 2, bezier = "easeOutQuint" })

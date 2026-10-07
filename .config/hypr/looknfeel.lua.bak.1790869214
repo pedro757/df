@@ -1,0 +1,19 @@
+hl.config({
+  general = {
+    gaps_in = 0,
+    gaps_out = 0,
+    border_size = 2,
+    col = {
+      inactive_border = "rgba(00000000)",
+    },
+    layout = "scrolling",
+  },
+  scrolling = {
+    column_width = 0.5,
+  },
+  cursor = {
+    warp_on_change_workspace = 0,
+  },
+})
+
+hl.animation({ leaf = "windowsMove", enabled = true, speed = 2, bezier = "easeOutQuint" })
