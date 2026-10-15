@@ -54,6 +54,11 @@ set -gx GPG_TTY (tty)
 # set --global tide_left_prompt_suffix
 
 if status --is-interactive
+    fish_vi_key_bindings
+    bind -M insert ctrl-e accept-autosuggestion
+    bind -M default H beginning-of-line
+    bind -M default L end-of-line
+
     abbr --add --global celar clear
     abbr --add --global clar clear
     abbr --add --global claer clear
