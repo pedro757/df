@@ -21,9 +21,11 @@ local function focus_on_scroll()
   local workspace = monitor.active_special_workspace or monitor.active_workspace
   if not workspace then return end
 
-  -- Leave panels and overlay surfaces alone.
+  -- Leave panels and overlay surfaces alone. Notifications use a fullscreen
+  -- surface with a smaller input mask, so their bounds must not block focus.
   for _, layer in ipairs(hl.get_layers()) do
-    if layer.mapped and layer.layer >= 2 and contains(pos, layer.x, layer.y, layer.w, layer.h) then
+    if layer.mapped and layer.layer >= 2 and layer.namespace ~= "omarchy-notifications"
+      and contains(pos, layer.x, layer.y, layer.w, layer.h) then
       return
     end
   end
