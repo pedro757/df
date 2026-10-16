@@ -28,6 +28,12 @@ return function(step)
     end
   end
 
+  -- Without floating windows, keep the original J/K down/up navigation.
+  if #floats == 0 then
+    hl.dispatch(hl.dsp.focus({ direction = step > 0 and "u" or "d" }))
+    return
+  end
+
   local order = {}
   if base then order[#order + 1] = base end
   for _, window in ipairs(floats) do
