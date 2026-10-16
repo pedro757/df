@@ -4,6 +4,8 @@ hl.config({
     kb_variant = "altgr-intl",
     repeat_delay = 600,
     follow_mouse = 0,
+    -- Don't let hovering between floating and tiled windows override follow_mouse.
+    float_switch_override_focus = 0,
   },
 })
 

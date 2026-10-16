@@ -23,8 +23,9 @@ end
 
 o.bind("SUPER + H", nil, hl.dsp.focus({ direction = "l" }))
 o.bind("SUPER + L", nil, hl.dsp.focus({ direction = "r" }))
-o.bind("SUPER + K", nil, hl.dsp.focus({ direction = "u" }))
-o.bind("SUPER + J", nil, hl.dsp.focus({ direction = "d" }))
+local focus_stack = require("hypr.focus-stack")
+o.bind("SUPER + K", "Focus up the window stack", function() focus_stack(1) end)
+o.bind("SUPER + J", "Focus down the window stack", function() focus_stack(-1) end)
 
 o.bind("SUPER + F1", "Volume down", "omarchy-swayosd-client --output-volume lower", { locked = true, repeating = true })
 o.bind("SUPER + F2", "Volume up", "omarchy-swayosd-client --output-volume raise", { locked = true, repeating = true })
