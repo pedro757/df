@@ -30,6 +30,7 @@
     "input.select.down": "ctrl+j",
     "session.list": "ctrl+s",
     "session.new": "<leader>n,ctrl+n",
+    "variant.cycle": "none",
     "variant.list": "<leader>v",
     "dialog.select.prev": "up,ctrl+p,ctrl+k",
     "dialog.select.next": "down,ctrl+n,ctrl+j",
