@@ -1,4 +1,4 @@
-import { Plugin } from "@opencode-ai/plugin"
+import { Plugin } from "@opencode/plugin"
 import { spawn, spawnSync } from "node:child_process"
 import { basename } from "node:path"
 
