@@ -165,7 +165,13 @@ au("BufEnter", {
 local TrimSpaces = aug("TrimSpaces", clear)
 
 au("BufWritePre", {
-  callback = function()
+  callback = function(args)
+    -- Verbose commit messages contain diffs; do not scan or rewrite them on save.
+    local filetype = vim.bo[args.buf].filetype
+    if filetype == "gitcommit" or filetype == "bigfile" then
+      return
+    end
+
     local curpos = vim.api.nvim_win_get_cursor(0)
     vim.cmd([[:keepjumps keeppatterns %s/\s\+$//e]])
     vim.cmd([[:keepjumps keeppatterns silent! 0;/^\%(\n*.\)\@!/,$d]])

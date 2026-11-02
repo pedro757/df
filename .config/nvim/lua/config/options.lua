@@ -36,8 +36,9 @@ opt.termguicolors = true
 opt.swapfile = false
 opt.undodir = "/tmp/.vim-undo-dir"
 opt.undofile = true
-opt.foldmethod = "expr"
-opt.foldexpr = "nvim_treesitter#foldexpr()"
+-- Enable expression folding per FileType, not while reading huge commit diffs.
+opt.foldmethod = "manual"
+opt.foldexpr = "v:lua.vim.treesitter.foldexpr()"
 opt.foldlevelstart = 20
 opt.lazyredraw = true
 opt.iskeyword:append("-")
