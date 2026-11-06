@@ -96,7 +96,12 @@ m("n", "<leader>dN", function()
 end, { desc = "Previous Diagnostic", silent = true })
 m("n", "<leader>dq", vim.diagnostic.setloclist, { desc = "Send to LocList", silent = true })
 m("n", "<leader>=", function()
-  vim.lsp.buf.format({ async = true, filter = function(client) return client.name ~= "tsc" end })
+  vim.lsp.buf.format({
+    async = true,
+    filter = function(client)
+      return client.name ~= "tsc" and client.name ~= "tsrs"
+    end,
+  })
 end, { desc = "Format file", silent = true })
 
 m({ "n", "v" }, "<leader>a", vim.lsp.buf.code_action, { desc = "Code Action", silent = true })

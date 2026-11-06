@@ -1,5 +1,5 @@
--- hl.unbind("SUPER + RETURN")
--- o.bind("SUPER + RETURN", "Terminal", 'uwsm-app -- ghostty --working-directory="$(omarchy-cmd-terminal-cwd)"')
+hl.unbind("SUPER + RETURN")
+o.bind("SUPER + RETURN", "Terminal", 'uwsm-app -- ghostty --working-directory="$(omarchy-cmd-terminal-cwd)"')
 
 hl.unbind("SUPER + SHIFT + B")
 o.bind("SUPER + SHIFT + B", "Browser", "brave")
@@ -13,8 +13,34 @@ o.bind("SUPER + SHIFT + W", "Typora", "uwsm-app -- typora --enable-wayland-ime")
 hl.unbind("SUPER + SHIFT + C")
 o.bind("SUPER + SHIFT + C", "Calculator", "omacalc")
 
+-- Override Universal paste so OpenCode handles images as well as text.
+hl.unbind("SUPER + V")
+o.bind("SUPER + V", "Universal paste", function()
+  local window = hl.get_active_window()
+  local terminal = false
+  for _, tag in ipairs(window and window.tags or {}) do
+    if tag:gsub("%*$", "") == "terminal" then
+      terminal = true
+      break
+    end
+  end
+
+  local title = window and window.title or ""
+  local opencode = title == "OpenCode" or title:match("^OC |") ~= nil
+  local mods, key = "CTRL", "V"
+  if terminal and not opencode then
+    mods, key = "SHIFT", "Insert"
+  end
+
+  -- Match Omarchy's down/up split to avoid stuck synthetic keys.
+  hl.dispatch(hl.dsp.send_key_state({ mods = mods, key = key, state = "down" }))
+  hl.timer(function()
+    hl.dispatch(hl.dsp.send_key_state({ mods = mods, key = key, state = "up" }))
+  end, { timeout = 50, type = "oneshot" })
+end)
+
+hl.unbind("SUPER + Q")
 o.bind("SUPER + Q", nil, hl.dsp.layout("colresize -conf"))
-o.bind("SUPER + SHIFT + Q", nil, hl.dsp.layout("colresize +conf"))
 o.bind("SUPER + R", "Omarchy menu", "omarchy-menu")
 
 for _, key in ipairs({ "H", "J", "K", "L" }) do

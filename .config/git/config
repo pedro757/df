@@ -33,3 +33,9 @@
 	name = Pedro Sanchez
 [credential]
 	helper = gopass
+[credential "https://github.com"]
+	helper = 
+	helper = !/home/pedro/.local/share/mise/installs/gh/2.103.3/gh_2.103.3_linux_amd64/bin/gh auth git-credential
+[credential "https://gist.github.com"]
+	helper = 
+	helper = !/home/pedro/.local/share/mise/installs/gh/2.103.3/gh_2.103.3_linux_amd64/bin/gh auth git-credential

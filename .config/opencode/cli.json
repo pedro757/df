@@ -5,7 +5,8 @@
   },
   "diffs": {
     "wrap": "word",
-    "tree": true
+    "tree": true,
+    "fullscreen": true
   },
   "session": {
     "sidebar": "hide",
@@ -44,5 +45,8 @@
   "plugins": [
     "-opencode.notifications"
   ],
-  "animations": true
+  "animations": true,
+  "prompt": {
+    "image_preview": true
+  }
 }

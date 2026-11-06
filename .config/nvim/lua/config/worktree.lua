@@ -196,7 +196,7 @@ local function parse_worktrees(output)
   local current
 
   local function add_current()
-    if current and current.path and not current.bare then
+    if current and current.path and not current.bare and vim.fn.isdirectory(current.path) == 1 then
       current.branch = current.branch or "(detached)"
       current.sha = current.sha or ""
       table.insert(worktrees, current)
@@ -249,9 +249,6 @@ local function menu_lines(worktrees, current_root)
     local marker = worktree.path == current_root and "*" or " "
     local path = vim.fn.fnamemodify(worktree.path, ":~")
     local line = string.format("%s %-" .. branch_width .. "s  %s", marker, worktree.branch, path)
-    if vim.fn.isdirectory(worktree.path) ~= 1 then
-      line = line .. " [missing]"
-    end
     table.insert(lines, line)
   end
 
@@ -296,13 +293,14 @@ function M.open_menu()
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false
 
+  local menu_footer = " g<number> switch  <C-j>/<C-k> move  <CR>/<C-l> switch  <C-d> delete  q/<C-c>/<C-x> close "
   local win = vim.api.nvim_open_win(buf, true, {
     relative = "editor",
     style = "minimal",
     border = "rounded",
     title = " Git Worktrees ",
     title_pos = "center",
-    footer = " <C-j>/<C-k> move  <CR>/<C-l> switch  <C-d> delete  q/<C-c>/<C-x> close ",
+    footer = menu_footer,
     footer_pos = "center",
     width = width,
     height = height,
@@ -312,18 +310,29 @@ function M.open_menu()
   menu_win = win
 
   vim.wo[win].cursorline = true
-  vim.wo[win].number = false
+  vim.wo[win].number = true
   vim.wo[win].relativenumber = false
   vim.wo[win].signcolumn = "no"
   vim.wo[win].wrap = false
 
+  local pending_goto
+
+  local function clear_pending_goto()
+    pending_goto = nil
+    if vim.api.nvim_win_is_valid(win) then
+      vim.api.nvim_win_set_config(win, { footer = menu_footer })
+    end
+  end
+
   local function close_menu()
+    pending_goto = nil
     if vim.api.nvim_win_is_valid(win) then
       vim.api.nvim_win_close(win, true)
     end
   end
 
   local pending_delete
+  local force_delete_path
   local deleting = false
 
   local function set_menu_line(line, text)
@@ -344,11 +353,78 @@ function M.open_menu()
     end
   end
 
+  local function show_pending_goto()
+    if pending_goto and vim.api.nvim_win_is_valid(win) then
+      local line = tonumber(pending_goto.digits)
+      if line and line >= 1 and line <= #worktrees then
+        vim.api.nvim_win_set_cursor(win, { line, 0 })
+      end
+
+      vim.api.nvim_win_set_config(win, {
+        footer = " Select worktree: " .. pending_goto.digits .. "  <CR> confirm  <Esc> cancel ",
+      })
+    end
+  end
+
+  local switch_selected
+
+  local function finish_goto()
+    local pending = pending_goto
+    if not pending then
+      return
+    end
+
+    clear_pending_goto()
+    if not vim.api.nvim_win_is_valid(win) or pending.digits == "" then
+      return
+    end
+
+    local line = tonumber(pending.digits)
+    if not line or line < 1 or line > #worktrees then
+      vim.notify("Worktree number must be between 1 and " .. #worktrees, vim.log.levels.WARN)
+      return
+    end
+
+    vim.api.nvim_win_set_cursor(win, { line, 0 })
+    switch_selected()
+  end
+
+  local function start_goto()
+    if deleting then
+      return
+    end
+
+    clear_pending_delete()
+    pending_goto = { digits = "" }
+    show_pending_goto()
+  end
+
+  local function goto_digit(digit)
+    if not pending_goto then
+      return digit
+    end
+
+    local pending = { digits = pending_goto.digits .. digit }
+    pending_goto = pending
+    vim.schedule(function()
+      if pending_goto == pending then
+        show_pending_goto()
+      end
+    end)
+    vim.defer_fn(function()
+      if pending_goto == pending then
+        finish_goto()
+      end
+    end, 1000)
+    return ""
+  end
+
   local function refresh_menu(selected_line)
     if not vim.api.nvim_win_is_valid(win) or not vim.api.nvim_buf_is_valid(buf) then
       return
     end
 
+    clear_pending_goto()
     local refreshed = vim.fn.systemlist({ "git", "worktree", "list", "--porcelain" })
     if vim.v.shell_error ~= 0 then
       set_menu_line(selected_line, lines[selected_line])
@@ -376,22 +452,49 @@ function M.open_menu()
     vim.api.nvim_win_set_cursor(win, { math.min(selected_line, #worktrees), 0 })
   end
 
+  local function refresh_missing_worktrees()
+    if not vim.api.nvim_win_is_valid(win) or not vim.api.nvim_buf_is_valid(buf) then
+      return
+    end
+
+    if not deleting then
+      for _, worktree in ipairs(worktrees) do
+        if vim.fn.isdirectory(worktree.path) ~= 1 then
+          local line = vim.api.nvim_win_get_cursor(win)[1]
+          clear_pending_delete()
+          refresh_menu(line)
+          break
+        end
+      end
+    end
+
+    if vim.api.nvim_win_is_valid(win) then
+      vim.defer_fn(refresh_missing_worktrees, 1000)
+    end
+  end
+
+  vim.defer_fn(refresh_missing_worktrees, 1000)
+
   local function delete_selected()
     if deleting or not vim.api.nvim_win_is_valid(win) then
       return
     end
 
+    clear_pending_goto()
     local line = vim.api.nvim_win_get_cursor(win)[1]
     local worktree = worktrees[line]
     if not worktree then
       return
     end
 
-    if not pending_delete or pending_delete.path ~= worktree.path then
+    local force = force_delete_path == worktree.path
+    if not pending_delete or pending_delete.path ~= worktree.path or pending_delete.force ~= force then
       clear_pending_delete()
-      local confirmation = { path = worktree.path, line = line }
+      local confirmation = { path = worktree.path, line = line, force = force }
       pending_delete = confirmation
-      set_menu_line(line, "! Press <C-d> again within 2s to delete " .. worktree.branch)
+      local prompt = force and "! Press <C-d> again within 2s to FORCE delete " or "! Press <C-d> again within 2s to delete "
+      local warning = force and " (discards uncommitted changes)" or ""
+      set_menu_line(line, prompt .. worktree.branch .. warning)
       vim.defer_fn(function()
         if pending_delete == confirmation then
           clear_pending_delete()
@@ -403,23 +506,50 @@ function M.open_menu()
     clear_pending_delete()
     deleting = true
     set_menu_line(line, "Deleting " .. worktree.branch .. "...")
-    git_worktree.delete_worktree(worktree.path, false, {
+    local callbacks = {
       on_success = function()
         deleting = false
+        force_delete_path = nil
         refresh_menu(line)
       end,
       on_failure = vim.schedule_wrap(function()
         deleting = false
-        set_menu_line(line, lines[line])
+        force_delete_path = worktree.path
+        set_menu_line(
+          line,
+          "! Delete failed. Press <C-d> twice to FORCE delete " .. worktree.branch .. " (discards uncommitted changes)"
+        )
       end),
-    })
+    }
+
+    local function remove_worktree()
+      git_worktree.delete_worktree(worktree.path, force, callbacks)
+    end
+
+    if force then
+      remove_worktree()
+      return
+    end
+
+    -- The plugin raises an error on failure even when on_failure is provided.
+    -- Handle dirty worktrees here so the expected refusal stays in the menu.
+    vim.system({ "git", "-C", worktree.path, "status", "--porcelain", "--untracked-files=normal" }, {
+      text = true,
+    }, vim.schedule_wrap(function(result)
+      if result.code == 0 and result.stdout ~= "" then
+        callbacks.on_failure()
+      else
+        remove_worktree()
+      end
+    end))
   end
 
-  local function switch_selected()
+  switch_selected = function()
     if deleting or not vim.api.nvim_win_is_valid(win) then
       return
     end
 
+    clear_pending_goto()
     local line = vim.api.nvim_win_get_cursor(win)[1]
     local worktree = worktrees[line]
     if not worktree then
@@ -443,6 +573,7 @@ function M.open_menu()
 
   local function move_selection(offset)
     if vim.api.nvim_win_is_valid(win) then
+      clear_pending_goto()
       clear_pending_delete()
       local line = vim.api.nvim_win_get_cursor(win)[1]
       line = math.max(1, math.min(#worktrees, line + offset))
@@ -456,11 +587,30 @@ function M.open_menu()
 
   vim.keymap.set("n", "<C-j>", function() move_selection(1) end, opts("Next worktree"))
   vim.keymap.set("n", "<C-k>", function() move_selection(-1) end, opts("Previous worktree"))
-  vim.keymap.set("n", "<CR>", switch_selected, opts("Switch worktree"))
+  vim.keymap.set("n", "g", start_goto, opts("Select worktree by number"))
+  for digit = 0, 9 do
+    local key = tostring(digit)
+    local digit_opts = opts("Enter worktree number digit")
+    digit_opts.expr = true
+    vim.keymap.set("n", key, function() return goto_digit(key) end, digit_opts)
+  end
+  vim.keymap.set("n", "<CR>", function()
+    if pending_goto then
+      finish_goto()
+    else
+      switch_selected()
+    end
+  end, opts("Confirm number or switch worktree"))
   vim.keymap.set("n", "<C-l>", switch_selected, opts("Switch worktree"))
   vim.keymap.set("n", "<C-d>", delete_selected, opts("Delete worktree"))
   vim.keymap.set("n", "q", close_menu, opts("Close"))
-  vim.keymap.set("n", "<Esc>", close_menu, opts("Close"))
+  vim.keymap.set("n", "<Esc>", function()
+    if pending_goto then
+      clear_pending_goto()
+    else
+      close_menu()
+    end
+  end, opts("Cancel goto or close"))
   vim.keymap.set("n", "<C-c>", close_menu, opts("Close"))
   vim.keymap.set("n", "<C-x>", close_menu, opts("Close"))
 end

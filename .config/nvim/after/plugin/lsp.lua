@@ -52,7 +52,18 @@ null_ls.setup({
 -- vim.api.nvim_create_user_command("NullLsStop", null_ls_stop, {})
 
 vim.lsp.enable("lua_ls")
-vim.lsp.enable("tsc")
+-- vim.lsp.enable("tsc")
+vim.lsp.config("tsrs", {
+  cmd = { "tsrs", "--lsp", "-stdio" },
+  filetypes = {
+    "typescript",
+    "typescriptreact",
+    "javascript",
+    "javascriptreact",
+  },
+  root_markers = { "tsconfig.json", "jsconfig.json", "package.json", ".git" },
+})
+vim.lsp.enable("tsrs")
 vim.lsp.enable("emmet_language_server")
 vim.lsp.enable("marksman")
 vim.lsp.enable("dockerls")
@@ -63,6 +74,12 @@ vim.lsp.enable("jsonls")
 vim.lsp.enable("cssls")
 vim.lsp.enable("html")
 vim.lsp.enable("oxlint")
+-- Let Tombi format TOML; oxfmt would undo its multiline inline tables.
+vim.lsp.config("oxfmt", {
+  filetypes = vim.tbl_filter(function(filetype)
+    return filetype ~= "toml"
+  end, vim.lsp.config.oxfmt.filetypes),
+})
 vim.lsp.enable("oxfmt")
 vim.lsp.enable("yamlls")
 
@@ -121,3 +138,16 @@ vim.lsp.config("tailwindcss", {
 })
 
 vim.lsp.enable("tailwindcss")
+vim.lsp.config("tombi", {
+  settings = {
+    tombi = {
+      ["toml-version"] = "v1.1.0",
+      format = {
+        rules = {
+          ["line-width"] = 80,
+        },
+      },
+    },
+  },
+})
+vim.lsp.enable("tombi")
