@@ -33,7 +33,7 @@ import {
   type Tab,
 } from "./model"
 import { Select, type SelectAction, type SelectOption } from "./select"
-import { formatWake, pickSnoozePreset, resolveCustomSnooze, resolveSnoozePresets, snoozeWakeLabel } from "./snooze"
+import { formatWake, pickSnoozePreset, resolveCustomSnooze, resolveSnoozePresets, snoozeTimeLeft } from "./snooze"
 import { DIALOG_LIST_INSET, Prompt, statusGutter, useDialogTheme } from "./ui"
 import { createDebouncedSignal, errorMessage, projectName, sessionTitle, truncate } from "./util"
 
@@ -261,7 +261,7 @@ export function InboxDialog(props: { inbox: Inbox; options: Options; start?: Dia
       const worktree =
         relative.startsWith("..") || path.isAbsolute(relative) ? truncate(path.basename(relative), 25) : undefined
       const footer = [
-        placement.until !== undefined ? `${snoozeWakeLabel(placement.until, at)} left` : undefined,
+        placement.until !== undefined ? snoozeTimeLeft(placement.until, at) : undefined,
         placement.woke ? "woke" : undefined,
         worktree,
       ].filter(Boolean)
@@ -536,6 +536,7 @@ export function InboxDialog(props: { inbox: Inbox; options: Options; start?: Dia
           }}
           actions={actions()}
           halfPageKeys={halfPageKeys}
+          jumpKey={keys.jump}
         />
       </Match>
       <Match when={view().type === "snooze" && (view() as Extract<View, { type: "snooze" }>)}>
@@ -626,7 +627,7 @@ export function InboxDialog(props: { inbox: Inbox; options: Options; start?: Dia
           <Show when={currentWake()}>
             {(until) => (
               <text fg={theme().text.muted}>
-                {`Snoozed until ${formatWake(until(), inbox.clock())}, ${snoozeWakeLabel(until(), inbox.clock())} left`}
+                {`Snoozed until ${formatWake(until(), inbox.clock())}, ${snoozeTimeLeft(until(), inbox.clock())}`}
               </text>
             )}
           </Show>
@@ -635,6 +636,7 @@ export function InboxDialog(props: { inbox: Inbox; options: Options; start?: Dia
         options={pickerOptions()}
         config={config}
         halfPageKeys={halfPageKeys}
+        jumpKey={keys.jump}
         onCancel={() => backToList(pickerProps.view.standalone)}
         onSelect={(option) => {
           if (option.value === "custom") {

@@ -6,6 +6,7 @@ import {
   resolveCustomSnooze,
   resolveSnoozePresets,
   snoozeWakeLabel,
+  snoozeTimeLeft,
 } from "../src/snooze"
 
 const MIN = 60_000
@@ -99,4 +100,11 @@ describe("resolveCustomSnooze", () => {
     expect(resolveCustomSnooze("2026-02-30 10:00", now)).toHaveProperty("error")
     expect(resolveCustomSnooze("today 10:00", now)).toHaveProperty("error")
   })
+})
+
+test("time left reads as a phrase, and a due snooze is waking up", () => {
+  const now = Date.UTC(2026, 10, 7, 12, 0)
+  expect(snoozeTimeLeft(now + 45 * 60_000, now)).toBe("45m left")
+  expect(snoozeTimeLeft(now + 2_000, now)).toBe("1m left")
+  expect(snoozeTimeLeft(now - 1_000, now)).toBe("waking up")
 })

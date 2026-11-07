@@ -113,6 +113,7 @@ export interface Keybinds {
   readonly delete: string
   readonly halfPageDown: string
   readonly halfPageUp: string
+  readonly jump: string
   readonly nextTab: string
   readonly previousTab: string
 }
@@ -136,6 +137,7 @@ export const DEFAULT_KEYBINDS: Keybinds = {
   delete: "ctrl+x",
   halfPageDown: "ctrl+d",
   halfPageUp: "ctrl+u",
+  jump: "ctrl+s",
   nextTab: "tab",
   previousTab: "shift+tab",
 }
@@ -164,6 +166,7 @@ export function parseOptions(input: Readonly<Record<string, unknown>>): Options 
       delete: key("delete"),
       halfPageDown: key("halfPageDown"),
       halfPageUp: key("halfPageUp"),
+      jump: key("jump"),
       nextTab: key("nextTab"),
       previousTab: key("previousTab"),
     },

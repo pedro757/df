@@ -187,6 +187,12 @@ export function snoozeWakeLabel(until: number, now: number): string {
   return `${Math.ceil(remaining / DAY_MS)}d`
 }
 
+/** The time left on a snooze for list rows: "45m left", or "waking up" once it is due but not yet swept. */
+export function snoozeTimeLeft(until: number, now: number): string {
+  const label = snoozeWakeLabel(until, now)
+  return label === "now" ? "waking up" : `${label} left`
+}
+
 export function localSnoozeDate(date: Date): string {
   return `${String(date.getFullYear()).padStart(4, "0")}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
 }

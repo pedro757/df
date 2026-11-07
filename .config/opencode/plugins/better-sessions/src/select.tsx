@@ -121,6 +121,8 @@ export interface SelectProps<T> {
   onCancel?: () => void
   /** Keys for vim-style half-page scrolling (CTRL-D / CTRL-U). */
   halfPageKeys?: { readonly down: string; readonly up: string }
+  /** Key that toggles jump labels. */
+  jumpKey?: string
 }
 
 export function Select<T>(props: SelectProps<T>) {
@@ -133,6 +135,9 @@ export function Select<T>(props: SelectProps<T>) {
   const [store, setStore] = createStore({ selected: 0, filter: props.initialFilter ?? "" })
   let selection: { value: T; category?: string } | undefined
   let resetSelection = false
+  // Whether the user moved the selection. Until then, a list opened without a current option keeps the top row
+  // selected while sessions load in, instead of following whichever row happened to be first.
+  let touched = false
   let pendingScroll: (() => void) | undefined
   let input: InputRenderable | undefined
   let scroll: ScrollBoxRenderable | undefined
@@ -209,7 +214,7 @@ export function Select<T>(props: SelectProps<T>) {
         if ((props.focus ?? props.current) === undefined) {
           const count = flat().length
           if (count === 0) return
-          if (selection) {
+          if (selection && touched) {
             const index = focusIndex(selection.value)
             if (index >= 0) {
               setStore("selected", index)
@@ -266,14 +271,14 @@ export function Select<T>(props: SelectProps<T>) {
       if (filter.length > 0) {
         const option = flat()[0]
         if (!option) return
-        moveTo(0, true, false)
+        moveTo(0, true, false, false)
         scrollAfterLayout(true, option.value)
         return
       }
       if (current === undefined) return
       const index = focusIndex(current)
       if (index < 0) return
-      moveTo(index, true)
+      moveTo(index, true, true, false)
       scrollAfterLayout(true, current)
     }, { defer: true }),
   )
@@ -283,12 +288,13 @@ export function Select<T>(props: SelectProps<T>) {
     moveTo(moveSelection(store.selected, { count: flat().length, delta: direction, policy: "wrap" }), true)
   }
 
-  function moveTo(next: number, center = false, preserve = true) {
-    select(next, preserve)
+  function moveTo(next: number, center = false, preserve = true, user = true) {
+    select(next, preserve, user)
     scrollToSelection(center)
   }
 
-  function select(next: number, preserve = true) {
+  function select(next: number, preserve = true, user = true) {
+    if (user) touched = true
     setStore("selected", next)
     const option = selected()
     if (option) {
@@ -491,6 +497,17 @@ export function Select<T>(props: SelectProps<T>) {
                 group: "Dialog",
                 bind: props.halfPageKeys.up,
                 run: () => scrollHalfPage(-1),
+              },
+            ]
+          : []),
+        ...(props.jumpKey
+          ? [
+              {
+                id: "better_sessions.jump",
+                title: "Jump to a row",
+                group: "Dialog",
+                bind: props.jumpKey,
+                run: () => toggle(),
               },
             ]
           : []),
