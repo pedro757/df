@@ -71,11 +71,11 @@ background stays snoozed.
 
 - **Jump** (`ctrl+s`): labels every visible row, like folke/flash.nvim's
   `jump({ search = { mode = "search", max_length = 0 }, label = { after = { 0, 0 } }, pattern = "^" })`. Type a
-  label to move the selection to that row. Labels use flash's order: `asdfghjklqwertyuiopzxcvbnm`, then the same
+  label to open that session, as if you had moved to it and pressed `return`. Labels use flash's order: `asdfghjklqwertyuiopzxcvbnm`, then the same
   letters in uppercase, handed out by distance from the selected row (the selected row gets `a`, then rows
   alternate below and above, below first). The rest of the list dims while labels are shown. `esc` or `ctrl+s`
   again cancels. A letter that is not a label just ends the jump; other keys (arrows, `return`, `ctrl+e`, ...)
-  end it and then do what they always do. Jump also works in the snooze menu. Pressing the `session.list` key
+  end it and then do what they always do. In the snooze menu a label picks that snooze time. Pressing the `session.list` key
   while the list is open toggles labels too, instead of reopening the list.
 - `ctrl+d` / `ctrl+u`: half page down / up, like vim. The list scrolls by half its height and the selection
   moves the same number of lines; at either end the selection keeps moving until the first or last row.
@@ -122,7 +122,7 @@ session" palette entry or `/sessions`. Disable it with `"-better-sessions"` in `
 | `ctrl+x` (twice)        | Delete                                          | `delete`                      |
 | `ctrl+r`                | Rename                                          | `session.rename` keybind      |
 | `ctrl+f`                | Pin / unpin                                     | `session.pin.toggle` keybind  |
-| `ctrl+s`                | Jump labels                                     | `jump`                        |
+| `ctrl+s`, then a label  | Open the labeled session                        | `jump`                        |
 | `ctrl+d` / `ctrl+u`     | Half page down / up                             | `halfPageDown` / `halfPageUp` |
 | `return`                | Open the session                                |                               |
 | `esc`                   | Cancel jump labels, or close                    |                               |

@@ -339,7 +339,7 @@ export function Select<T>(props: SelectProps<T>) {
     scroll.scrollTo(next.top)
   }
 
-  // Jump labels (flash.nvim): every visible row gets a label; typing it moves the selection there.
+  // Jump labels (flash.nvim): every visible row gets a label; typing it picks that row.
   const [jumpLabels, setJumpLabels] = createSignal<readonly { value: T; label: string }[]>()
   const labelOf = (value: T) => jumpLabels()?.find((item) => same(item.value, value))?.label
 
@@ -363,7 +363,10 @@ export function Select<T>(props: SelectProps<T>) {
       stopJump()
       if (!hit) return
       const index = focusIndex(hit.value)
-      if (index >= 0) moveTo(index)
+      if (index < 0) return
+      // A label picks its row, like return on it: the session list opens the session, the snooze menu snoozes.
+      moveTo(index)
+      submit()
       return
     }
     // Any other key ends the jump and then does what it always does (move, settle, open, switch tab, ...).
