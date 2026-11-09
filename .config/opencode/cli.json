@@ -1,4 +1,5 @@
 {
+  "$schema": "https://opencode.ai/v2/cli.json",
   "theme": {
     "name": "system",
     "mode": "dark"
@@ -31,6 +32,7 @@
     "input.select.down": "ctrl+j",
     "session.list": "ctrl+s",
     "session.new": "<leader>n,ctrl+n",
+    "model.cycle_favorite": "ctrl+m",
     "variant.cycle": "none",
     "variant.list": "<leader>v",
     "dialog.select.prev": "up,ctrl+p,ctrl+k",
