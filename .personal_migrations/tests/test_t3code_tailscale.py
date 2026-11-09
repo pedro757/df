@@ -210,7 +210,7 @@ class BridgeMigrationTests(unittest.TestCase):
             patch.object(migration, "authorize") as authorize,
             redirect_stdout(io.StringIO()),
         ):
-            migration.main(["install", "--namespace", "wg3", "--backend-port", "4888", "--https-port", "8443"])
+            migration.main(["install", "--bridge-only", "--namespace", "wg3", "--backend-port", "4888", "--https-port", "8443"])
             for name, text in migration.user_units(self.config).items():
                 self.assertEqual((config_home / "systemd/user" / name).read_text(), text)
             self.assertEqual((home / ".local/bin/t3code-wg3-bridge").read_text(), SOURCE.read_text())
@@ -236,7 +236,7 @@ class BridgeMigrationTests(unittest.TestCase):
             patch.object(migration, "authorize") as authorize,
             redirect_stdout(output),
         ):
-            migration.main(["--dry-run", "--namespace", "wg3", "--backend-port", "4888", "--https-port", "8443"])
+            migration.main(["--dry-run", "--bridge-only", "--namespace", "wg3", "--backend-port", "4888", "--https-port", "8443"])
         self.assertFalse(home.exists())
         authorize.assert_not_called()
         plan = json.loads(output.getvalue())
