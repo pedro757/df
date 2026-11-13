@@ -12,9 +12,9 @@ export const TAB_LABEL: Record<Tab, string> = {
 
 /** What the user decided about a root session. Absent means "follow the defaults". */
 export type Entry =
-  /** Explicitly settled. Stays settled until restored or the user sends a message. */
+  /** Explicitly settled. Stays settled until restored or the user acts on it (a message, `/compact`, a `!` command). */
   | { readonly state: "settled"; readonly at: number }
-  /** Explicitly restored, or woken from a snooze. Counts as activity for auto-settle. */
+  /** Restored, woken from a snooze, or acted on by the user. Counts as activity for auto-settle. */
   | { readonly state: "active"; readonly at: number; readonly woke?: number }
   /**
    * Snoozed until `until`. `permissions` and `forms` are the requests already pending when the snooze
@@ -138,6 +138,18 @@ export function place(input: {
 export function settleBlocker(signals: Signals): string | undefined {
   if (signals.working && !signals.attention) return "This session is still running. Settle it once it finishes"
   return undefined
+}
+
+/**
+ * Whether an item the server queued for a session means the user is working on it again, which moves it back to
+ * Active. A message does. So does `/compact`, but the goal plugin also compacts by itself between rounds, while the
+ * session is still running, so a compaction only counts on a session that is not running. Synthetic items (results
+ * of background jobs and subagents) and moves never count.
+ */
+export function engagedBy(item: string, running: boolean): boolean {
+  if (item === "user") return true
+  if (item === "compaction") return !running
+  return false
 }
 
 /** t3code's `canSnooze`: pending approvals and queued prompts would wake the session at once. */

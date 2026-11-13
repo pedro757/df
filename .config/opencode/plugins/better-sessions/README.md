@@ -41,7 +41,7 @@ going, so it keeps its spinner.
   in Active until it is completely done. Sessions waiting on you (`!`/`?`) can be settled.
 - **Snooze** (`ctrl+t`): pick a time (In 1 hour, In 3 hours, This evening, Tomorrow, Next week, or Custom… with
   `45m`, `2h`, `3d`, `1h30m`, `14:00`, `tomorrow 09:00`, `2026-11-10 14:00`).
-- **Restore** (`ctrl+a`, for Active): back to Active.
+- **Restore** (`ctrl+g`): back to Active.
 
 The same actions are in the command palette for the session you are in: "Settle session", "Snooze session…" and
 "Restore session to Active".
@@ -52,13 +52,16 @@ The same actions are in the command palette for the session you are in: "Settle 
 
 ### Sending a message brings a session back
 
-Sending a message to a settled or snoozed session moves it back to Active.
+Sending a message to a settled or snoozed session moves it back to Active. So do `/compact` and a `!` shell
+command typed in its prompt. This also covers sessions that settled by themselves after 7 days. Results of background
+jobs and subagents don't count, and neither do the goal plugin's own compactions.
 
 ![Sending a message](https://raw.githubusercontent.com/pedro757/better-sessions/main/media/message.gif)
 
 ### Snoozes wake up
 
-A snooze ends at its time, with a toast and a `woke` marker in Active until you open the session. It also ends
+A snooze ends at its time, with a toast and a ⏰ in the status gutter in Active until you open the session (it
+shows instead of `!`/`?` when the session is also waiting on you). It also ends
 early when the session asks for a permission, asks a new question, or fails. This follows t3code's rules: a
 question that was already pending when you snoozed does not wake it, and a session that keeps working in the
 background stays snoozed.
@@ -87,7 +90,9 @@ background stays snoozed.
 
 ![Search, pin, rename and delete](https://raw.githubusercontent.com/pedro757/better-sessions/main/media/manage.gif)
 
-The list shows the sessions of the current directory. Search (server search plus local matches, debounced),
+The list shows the sessions of the current directory, or of every project: `ctrl+a` switches between the two, like
+the built-in list, and the choice is remembered. Until you switch here, it follows the built-in list's saved choice.
+Search (server search plus local matches, debounced),
 delete (`ctrl+x`, press twice), rename (`ctrl+r`), pin/unpin (`ctrl+f`) when session tabs are off, the
 `!`/`?`/spinner status gutter (the spinner honors `animations` in cli.json), worktree labels, the current-session
 marker, mouse hover and click, and the "Switch session" palette entry, `/sessions`, `/resume` and `/continue`.
@@ -101,7 +106,7 @@ how many are waiting on you.
 
 ## Install
 
-Built and tested on OpenCode 2.2.6.
+Built on OpenCode 2.2.6 and tested on 2.3.0.
 
 ```sh
 git clone https://github.com/pedro757/better-sessions ~/.config/opencode/plugins/better-sessions
@@ -113,16 +118,22 @@ session" palette entry or `/sessions`. Disable it with `"-better-sessions"` in `
 
 ## Keys
 
+The footer only shows `keybindings ?`, or `keybindings ctrl+/` while a search is in place. Press `?` with the search
+empty, or `ctrl+/` at any time (in a search, `?` types a `?`), to see every key the list answers to, as currently
+bound, so keys you changed in cli.json show up there. `esc`, `?` or `ctrl+/` goes back to the list.
+
 | Key                     | In the list                                     | Option                        |
 | ----------------------- | ----------------------------------------------- | ----------------------------- |
 | `tab` / `shift+tab`     | Next / previous tab                             | `nextTab` / `previousTab`     |
 | `ctrl+e`                | Settle                                          | `settle`                      |
 | `ctrl+t`                | Snooze                                          | `snooze`                      |
-| `ctrl+a`                | Restore to Active                               | `restore`                     |
+| `ctrl+g`                | Restore to Active                               | `restore`                     |
+| `ctrl+a`                | All projects / current directory                | `allProjects`                 |
 | `ctrl+x` (twice)        | Delete                                          | `delete`                      |
 | `ctrl+r`                | Rename                                          | `session.rename` keybind      |
 | `ctrl+f`                | Pin / unpin                                     | `session.pin.toggle` keybind  |
 | `ctrl+s`, then a label  | Open the labeled session                        | `jump`                        |
+| `?` or `ctrl+/`         | Keybindings                                     | `help`                        |
 | `ctrl+d` / `ctrl+u`     | Half page down / up                             | `halfPageDown` / `halfPageUp` |
 | `return`                | Open the session                                |                               |
 | `esc`                   | Cancel jump labels, or close                    |                               |
@@ -151,9 +162,11 @@ without configuration; add an entry only to change options:
         "keybinds": {
           "settle": "ctrl+e",
           "snooze": "ctrl+t",
-          "restore": "ctrl+a",
+          "restore": "ctrl+g",
+          "allProjects": "ctrl+a",
           "delete": "ctrl+x",
           "jump": "ctrl+s",
+          "help": "?,shift+?,shift+/,ctrl+/,ctrl+_",
           "halfPageDown": "ctrl+d",
           "halfPageUp": "ctrl+u",
           "nextTab": "tab",
@@ -176,7 +189,7 @@ without configuration; add an entry only to change options:
 
 ## State
 
-Settled, snoozed and pinned sessions are stored in the TUI's plugin storage
+Settled, snoozed and pinned sessions, and the all-projects choice, are stored in the TUI's plugin storage
 (`~/.local/state/opencode/<channel>/tui/plugin.better-sessions.state.json`), shared live by every TUI on this
 machine. Pins are copied once from the built-in list.
 

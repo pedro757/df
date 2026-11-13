@@ -128,26 +128,36 @@ export function Spinner(props: { color: RGBA; animations: boolean }) {
   )
 }
 
-/** The TUI's `sessionStatusGutter`: "!" for permissions, "?" for questions, a spinner while working. */
+/** Marks a session whose snooze ended and that the user has not opened since. */
+export const WOKE_MARKER = "⏰"
+
+/**
+ * The TUI's `sessionStatusGutter`, plus the snooze marker: "⏰" for a snooze that ended and has not been opened yet,
+ * which wins over the rest, then "!" for permissions, "?" for questions, then a spinner while working. The alarm clock
+ * is a wide glyph, so it reports a width of 2 cells for the row to make room.
+ */
 export function statusGutter(
   theme: DialogTheme,
-  attention: Attention,
-  working: boolean,
+  status: { attention: Attention; woke: boolean; working: boolean },
   animations: boolean,
   fallback?: () => JSX.Element,
-) {
+): { gutter?: (color: RGBA) => JSX.Element; gutterWidth?: number } {
+  const { attention } = status
+  if (status.woke) return { gutter: () => <text>{WOKE_MARKER}</text>, gutterWidth: 2 }
   if (attention) {
-    return (color: RGBA) => (
-      <text
-        fg={color === theme.text.action.primary.focused ? color : theme.text.feedback.warning.base}
-        attributes={TextAttributes.BOLD}
-      >
-        {attention === "permission" ? "!" : "?"}
-      </text>
-    )
+    return {
+      gutter: (color: RGBA) => (
+        <text
+          fg={color === theme.text.action.primary.focused ? color : theme.text.feedback.warning.base}
+          attributes={TextAttributes.BOLD}
+        >
+          {attention === "permission" ? "!" : "?"}
+        </text>
+      ),
+    }
   }
-  if (working) return (color: RGBA) => <Spinner color={color} animations={animations} />
-  return fallback
+  if (status.working) return { gutter: (color: RGBA) => <Spinner color={color} animations={animations} /> }
+  return { gutter: fallback }
 }
 
 export function DialogHeader(

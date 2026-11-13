@@ -3,6 +3,7 @@ import {
   activityAt,
   compareActive,
   compareSnoozed,
+  engagedBy,
   place,
   raisedHandWhileSnoozed,
   settleBlocker,
@@ -156,4 +157,25 @@ test("activityAt uses the latest timestamp", () => {
   const s = session({ time: { created: 1, updated: 5, busy: 9, idle: 7 } })
   expect(activityAt(s, undefined, NOW)).toBe(9)
   expect(activityAt(s, { state: "active", at: 20 }, NOW)).toBe(20)
+})
+
+test("messages, /compact on a session that is not running, and nothing else bring a session back", () => {
+  expect(engagedBy("user", false)).toBe(true)
+  expect(engagedBy("user", true)).toBe(true)
+  // /compact from the prompt, on a settled or snoozed session that is idle.
+  expect(engagedBy("compaction", false)).toBe(true)
+  // The goal plugin compacts by itself mid-run; that is not the user.
+  expect(engagedBy("compaction", true)).toBe(false)
+  // Background job and subagent results, and directory moves.
+  expect(engagedBy("synthetic", false)).toBe(false)
+  expect(engagedBy("move", false)).toBe(false)
+})
+
+test("an engaged session is Active again, even one that settled by itself long ago", () => {
+  const old = session({ updated: NOW - 30 * DAY })
+  expect(placeOf(old, undefined).tab).toBe("settled")
+  // What engage() records.
+  const engaged: Entry = { state: "active", at: NOW - 1000 }
+  expect(placeOf(old, engaged)).toEqual({ tab: "active", woke: false })
+  expect(placeOf(old, { state: "active", at: NOW - 8 * DAY }).tab).toBe("settled")
 })

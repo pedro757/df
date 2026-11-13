@@ -17,6 +17,7 @@ export interface CliConfig {
   readonly animations?: boolean
   readonly cursor?: { readonly style?: "block" | "underline" | "line" | "default"; readonly blinking?: boolean }
   readonly scroll?: { readonly speed?: number; readonly acceleration?: boolean }
+  readonly tabs?: { readonly scope?: "global" | "cwd" }
 }
 
 /** Strips JSONC comments and trailing commas without touching string contents. */
@@ -110,10 +111,12 @@ export interface Keybinds {
   readonly settle: string
   readonly snooze: string
   readonly restore: string
+  readonly allProjects: string
   readonly delete: string
   readonly halfPageDown: string
   readonly halfPageUp: string
   readonly jump: string
+  readonly help: string
   readonly nextTab: string
   readonly previousTab: string
 }
@@ -132,12 +135,17 @@ export interface Options {
 export const DEFAULT_KEYBINDS: Keybinds = {
   settle: "ctrl+e",
   snooze: "ctrl+t",
-  // "back to Active". ctrl+u is half page up.
-  restore: "ctrl+a",
+  // ctrl+a toggles all projects, like the built-in list; ctrl+u is half page up.
+  restore: "ctrl+g",
+  allProjects: "ctrl+a",
   delete: "ctrl+x",
   halfPageDown: "ctrl+d",
   halfPageUp: "ctrl+u",
   jump: "ctrl+s",
+  // Terminals report "?" as "?", "shift+?" or "shift+/"; OpenCode's diff viewer binds all three. "?" types into a
+  // search that is not empty, so ctrl+/ opens help at any time. Without the kitty keyboard protocol (e.g. in tmux)
+  // terminals send ctrl+/ as ctrl+_.
+  help: "?,shift+?,shift+/,ctrl+/,ctrl+_",
   nextTab: "tab",
   previousTab: "shift+tab",
 }
@@ -163,14 +171,29 @@ export function parseOptions(input: Readonly<Record<string, unknown>>): Options 
       settle: key("settle"),
       snooze: key("snooze"),
       restore: key("restore"),
+      allProjects: key("allProjects"),
       delete: key("delete"),
       halfPageDown: key("halfPageDown"),
       halfPageUp: key("halfPageUp"),
       jump: key("jump"),
+      help: key("help"),
       nextTab: key("nextTab"),
       previousTab: key("previousTab"),
     },
   }
+}
+
+/**
+ * The built-in session list's "all projects" choice, from its storage (`<state>/<channel>/tui/session-list.json`).
+ * Without a saved choice, the built-in shows all projects only when `tabs.scope` is "global".
+ */
+export function readHostAllProjects(channel: string, config: CliConfig): boolean {
+  try {
+    const value: unknown = JSON.parse(readFileSync(path.join(paths.state, channel, "tui", "session-list.json"), "utf8"))
+    const saved = value && typeof value === "object" ? (value as Record<string, unknown>).allProjects : undefined
+    if (typeof saved === "boolean") return saved
+  } catch {}
+  return config.tabs?.scope === "global"
 }
 
 /** One-time seeds from the built-in session list so switching to this plugin keeps the user's setup. */
