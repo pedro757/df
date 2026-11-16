@@ -4,6 +4,8 @@ set -Eeuo pipefail
 
 backendPort=4096
 bridgePort=4097
+httpsPort=443
+namespace=wg2
 
 usage() {
   cat <<'EOF'
@@ -15,6 +17,8 @@ Usage:
 Options:
   --backend-port PORT  OpenCode service port (default: 4096)
   --bridge-port PORT   Host-side Tailscale bridge port (default: 4097)
+  --https-port PORT    Tailscale HTTPS port (default: 443)
+  --namespace NAME     VPN launcher shown in instructions (default: wg2)
   -h, --help           Show this help
 
 The stable command is `opencode`. If a separate `opencode2` beta executable is
@@ -68,6 +72,16 @@ while (($# > 0)); do
       bridgePort=$2
       shift 2
       ;;
+    --https-port)
+      (($# >= 2)) || die '--https-port requires a value'
+      httpsPort=$2
+      shift 2
+      ;;
+    --namespace)
+      (($# >= 2)) || die '--namespace requires a name'
+      namespace=$2
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -81,11 +95,24 @@ done
 [[ $EUID -ne 0 ]] || die 'Run this migration as the desktop user, not with sudo'
 validatePort "$backendPort"
 validatePort "$bridgePort"
+validatePort "$httpsPort"
+[[ $namespace =~ ^wg([2-9]|[1-9][0-9]{1,4})$ ]] && \
+  ((10#${namespace#wg} <= 65535)) || die 'Namespace must be wg2 through wg65535'
 [[ $backendPort != "$bridgePort" ]] || die 'Backend and bridge ports must differ'
 
 for commandName in curl fish flock jq openssl readlink socat systemctl tailscale; do
   requireCommand "$commandName"
 done
+
+# Never replace T3 (or another application's) root HTTPS handler implicitly.
+serveConfig=$(tailscale serve status --json) || die 'Cannot read Tailscale Serve configuration'
+existingHandler=$(jq -c --arg port "$httpsPort" \
+  '.Web // {} | to_entries[] | select(.key | endswith(":" + $port)) | .value.Handlers["/"] // empty' \
+  <<< "$serveConfig")
+if [[ -n $existingHandler ]] && \
+  [[ $(jq -r '.Proxy // empty' <<< "$existingHandler") != "http://127.0.0.1:$bridgePort" ]]; then
+  die "Tailscale HTTPS port $httpsPort already serves another application; choose --https-port"
+fi
 
 binDirectory=$HOME/.local/bin
 libexecDirectory=$HOME/.local/libexec
@@ -194,10 +221,6 @@ fi
 flock -u 9
 exec 9>&-
 
-if ! tailscale serve --bg --yes http://127.0.0.1:$bridgePort >/dev/null 2>&1; then
-  printf 'Warning: could not update the Tailscale Serve route\\n' >&2
-fi
-
 exec "\$real_opencode" "\$@"
 EOF
 chmod 0755 "$wrapper"
@@ -238,7 +261,7 @@ systemctl --user daemon-reload
 systemctl --user enable --now opencode-tailscale-bridge.service
 
 PATH="$binDirectory:$PATH" "$stableLink" service restart >/dev/null
-tailscale serve --bg --yes "http://127.0.0.1:$bridgePort" >/dev/null
+tailscale serve --bg --yes "--https=$httpsPort" "http://127.0.0.1:$bridgePort" >/dev/null
 
 status=$(curl -sS -u "opencode:$password" -o /dev/null -w '%{http_code}' \
   --connect-timeout 5 --max-time 15 "http://127.0.0.1:$bridgePort/")
@@ -246,7 +269,7 @@ status=$(curl -sS -u "opencode:$password" -o /dev/null -w '%{http_code}' \
 
 printf '\nOpenCode Tailscale bridge installed successfully.\n'
 printf 'Run normally: opencode\n'
-printf 'Run through wg2: wg2-run opencode\n'
+printf 'Run through %s: %s-run opencode\n' "$namespace" "$namespace"
 printf 'Login username: opencode\n'
 printf 'Login password: %s\n' "$password"
 printf 'Tailscale URL:\n'

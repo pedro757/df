@@ -1,5 +1,144 @@
 # Personal migrations
 
+## Unified VPN apps + OpenCode + Browse setup
+
+Run the unified entry point as your **desktop user in an independent host
+terminal**, not with `sudo`, `wgN-run`, or inside the OpenCode service it will
+restart:
+
+```bash
+# Preview: no downloads, file writes, administrator prompts or service changes.
+~/.personal_migrations/setup-vpn-apps.py --app brave --replace t3code --dry-run
+~/.personal_migrations/setup-vpn-apps.py --app brave --replace t3code
+```
+
+This reuses `wg2` when installed. Otherwise it invokes the secure namespace
+installer with administrator approval and asks you to paste a WireGuard profile.
+It then creates the requested launchers, runs the existing OpenCode/Tailscale
+migration **inside the namespace**, and installs/configures Browse. Repeated
+runs do not create another VPN profile or reset browser pairings.
+
+Prerequisites are Python 3.9+, the apps you select, OpenCode V2, a connected
+Tailscale client, systemd, socat, curl, fish, jq, openssl, flock, and the
+WireGuard/iproute2 tools required by `setup-wg2-netns.sh`. The migration does not
+install those packages, sign into Tailscale, grant Serve permissions, or install
+your desktop apps. The first namespace creation requires an interactive terminal.
+
+### Add another launcher or replace the normal one
+
+`--app` and `--replace` are repeatable. Pass a desktop-entry ID or an absolute
+`.desktop` path; the migration uses the existing app's icon, arguments, file/URL
+placeholders, localized names and desktop actions.
+
+```bash
+# Only manage launchers, without reinstalling the VPN, OpenCode or Browse.
+~/.personal_migrations/setup-vpn-apps.py launcher --app brave --replace t3code
+~/.personal_migrations/setup-vpn-apps.py launcher --app org.example.Editor
+~/.personal_migrations/setup-vpn-apps.py launcher --replace /usr/share/applications/example.desktop
+
+# The old Brave entry point still works and accepts the same launcher options.
+~/.personal_migrations/add-brave-vpn-launcher.sh --app brave --replace t3code
+```
+
+- `--app brave` keeps normal **Brave** and adds **Brave VPN**, using a separate
+  namespace-specific profile so it cannot reuse a running non-VPN browser.
+- `--replace t3code` keeps the normal menu names, but replaces all discovered T3
+  menu and protocol-handler entries with VPN-only **user overrides**. It does
+  not add a second, non-VPN T3 launcher. Desktop actions are routed through the
+  VPN too, and D-Bus activation is disabled to avoid bypassing `Exec`.
+- Other apps can use either mode. System/package desktop files are never edited.
+  New apps with different desktop IDs/protocol handlers should have each ID
+  explicitly listed with `--replace`.
+- Close an app's existing non-VPN process before using its replacement:
+  single-instance apps can forward launches to that old process. Replacement
+  manages desktop/menu/URL launchers, not direct execution of packaged binaries
+  or custom shell aliases; it is not an OS-wide ban on non-VPN execution.
+
+Original user entries, modes and generated files are recorded privately under
+`${XDG_DATA_HOME:-~/.local/share}/vpn-app-launchers/state.json`. Repeat runs
+preserve the first originals. Restore selected launchers with:
+
+```bash
+~/.personal_migrations/setup-vpn-apps.py launcher --replace t3code --restore
+~/.personal_migrations/setup-vpn-apps.py launcher --app brave --restore
+```
+
+Later manual edits and symlinks are not silently overwritten or restored.
+Restoring a system entry's override exposes the unchanged system entry again.
+
+### OpenCode, Tailscale and other namespaces
+
+The unified setup defaults to OpenCode backend port **4096**, host bridge
+**4097**, and Tailscale HTTPS **8443**, leaving T3's usual HTTPS **443** alone.
+The standalone `setup-opencode-tailscale.sh` retains its historical HTTPS 443
+default. Both refuse to replace an unrelated root handler on the selected port.
+
+```bash
+~/.personal_migrations/setup-vpn-apps.py --namespace wg3 --app brave --replace t3code
+~/.personal_migrations/setup-vpn-apps.py --app brave --opencode-https-port 9443
+~/.personal_migrations/setup-vpn-apps.py --app brave --skip-tailscale
+~/.personal_migrations/setup-vpn-apps.py --app brave --skip-browse
+```
+
+The low-level installer still auto-selects the next free `wgN` when run by
+itself. Its new `--namespace wgN` option requests a specific **unused** name and
+refuses to overwrite an existing profile. The unified setup only creates it
+when the corresponding runner is missing; it starts an installed namespace
+service if necessary.
+
+This does not replace `setup-t3code-tailscale.py`: that migration additionally
+manages T3's desktop backend and remote Sharing & access settings, described
+below. Run it separately if you need remote T3 access.
+
+### One Browse MCP connection for Brave and Brave VPN
+
+Browse uses the official installer from
+`https://opencode.ai/browse/install` (the same installer as
+`curl -fsSL https://opencode.ai/browse/install | bash`). The binary is installed
+only if missing unless `--upgrade-browse` is passed. Installation defers
+interactive setup until the host relay is supervised, then registers OpenCode
+through `browse install --agent opencode`, preserving other agent settings.
+
+```bash
+# Configure only Browse against an already installed namespace.
+~/.personal_migrations/setup-vpn-apps.py browse
+~/.personal_migrations/setup-vpn-apps.py browse --upgrade-browse
+```
+
+Three systemd **user** services start at login:
+
+- `browse-relay.service`: the shared host relay on `127.0.0.1:19988`.
+- `browse-wg2-host.service`: a private, mode-0600 Unix socket to that relay.
+- `browse-wg2-local.service`: forwards the namespace's `127.0.0.1:19988` through
+  that socket. Another namespace gets its own `browse-wgN-*` bridge pair.
+
+OpenCode and Brave VPN stay inside the VPN namespace; regular Brave stays on
+the host. The existing single `browse mcp` entry reaches both. No Browse port
+is exposed on the LAN. Reconfiguration updates stale relay builds without
+changing either browser's network namespace or deleting pairing credentials.
+Use a quiet period: changing services can briefly disconnect browser automation.
+An already running standalone/unsupervised Browse relay must be stopped first;
+the migration refuses to kill it or hide a port conflict behind restarting units.
+
+Install/enable the Browse extension in **each browser profile**, then pair each
+one separately. Keep each command running while entering its one-time code in
+that profile's **Browse Options → Pair with a code → Connect**:
+
+```bash
+~/.personal_migrations/setup-vpn-apps.py pair brave
+~/.personal_migrations/setup-vpn-apps.py pair brave-vpn
+browse pair --list
+browse doctor
+```
+
+The pairing helper assigns stable `brave` / `brave-vpn` selectors to a newly
+paired profile. An existing profile holding the same name is preserved as
+`brave-old` / `brave-vpn-old` (with a numeric suffix if necessary), never
+silently revoked. Remove an obsolete pairing explicitly with
+`browse pair --revoke NAME`. Already working profiles need no re-pairing.
+Browse service files and its hostname config retain first-run
+`.before-vpn-apps` backups beside the originals.
+
 ## T3 Code + Tailscale HTTPS inside a WireGuard namespace
 
 `setup-t3code-tailscale.py` configures the complete **desktop-managed** setup:

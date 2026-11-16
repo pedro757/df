@@ -15,6 +15,7 @@ temporaryMounted=false
 validationInterface=
 reservedConfig=
 editorPid=
+requestedNamespace=
 
 usage() {
   cat <<'EOF'
@@ -27,6 +28,7 @@ Usage:
 Options:
   --dns ADDRESS  DNS server used inside the namespace (default: 10.2.0.1)
   --user USER    User allowed to run wg2-run (default: invoking sudo user)
+  --namespace NAME  Install a specific free wgN name instead of auto-selecting
   -h, --help     Show this help
 
 Paste a fresh provider-generated profile into the editor, save, and quit.
@@ -224,6 +226,13 @@ while (($# > 0)); do
       targetUser=$2
       shift 2
       ;;
+    --namespace)
+      (($# >= 2)) || die '--namespace requires a name'
+      requestedNamespace=$2
+      [[ $requestedNamespace =~ ^wg([2-9]|[1-9][0-9]{1,4})$ ]] && \
+        ((10#${requestedNamespace#wg} <= 65535)) || die 'Namespace must be wg2 through wg65535'
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -253,6 +262,7 @@ flock -n "$lockFd" || die 'Another WireGuard namespace installer is running'
 install -d -o root -g root -m700 /etc/wireguard
 
 index=2
+[[ -z $requestedNamespace ]] || index=$((10#${requestedNamespace#wg}))
 while true; do
   interface=wg$index
   namespace=$interface
@@ -267,6 +277,7 @@ while true; do
   if [[ $occupied == false ]] && ! ip link show "$interface" &>/dev/null; then
     break
   fi
+  [[ -z $requestedNamespace ]] || die "$requestedNamespace is already installed or occupied; refusing to replace it"
   index=$((index + 1))
   ((index <= 65535)) || die 'No free WireGuard namespace name found'
 done
