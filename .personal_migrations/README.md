@@ -105,6 +105,49 @@ through `browse install --agent opencode`, preserving other agent settings.
 ~/.personal_migrations/setup-vpn-apps.py browse --upgrade-browse
 ```
 
+#### Update Browse and the shared relay
+
+For an existing installation, use the dedicated updater from an independent
+terminal during a quiet period for browser automation:
+
+```bash
+~/.personal_migrations/update-opencode-browse.sh --dry-run
+~/.personal_migrations/update-opencode-browse.sh
+```
+
+It downloads the official installer, installs the latest stable binary with
+`--no-setup`, and restarts **`browse-relay.service` using systemd before querying
+Browse**. This handles upgrades such as 0.0.17 → 0.1.0, where the new CLI refuses
+to communicate with the old foreground relay. The namespace bridges stay in
+place and are ensured enabled/running; CLI/relay versions, service health and
+the listener's ownership by systemd's `MainPID` are verified. Browser profiles, pairing credentials, launcher files and OpenCode
+configuration are not rewritten. Each browser's connection status is reported;
+an offline browser does not make an otherwise successful update fail.
+
+If `curl -fsSL https://opencode.ai/browse/install | bash` already installed the
+new binary but reported that the foreground relay is still old:
+
+```bash
+~/.personal_migrations/update-opencode-browse.sh --restart-only
+```
+
+If the plain installer started a standalone relay and the service is looping
+with `EADDRINUSE`, the same `--restart-only` command repairs it. The updater
+pauses the restart loop, identifies the **host** port owner, and sends SIGTERM
+only after verifying that it is your installed `browse serve` process. A
+PID-reuse-safe handle is used; there is no broad process kill or SIGKILL.
+Unknown processes, another user's process, or a relay supervised by a different
+service are refused and left alone. If takeover fails, the stopped service is
+left stopped rather than entering another restart loop. Browser automation is
+briefly interrupted, but browser profiles and pairing records remain intact.
+
+Use `--namespace wg3` for a different existing bridge. Missing or unrelated
+service definitions are refused rather than replaced.
+The updater does not recreate namespaces, revoke pairings or restart
+OpenCode. If a browser remains offline, open its profile and reload its Browse
+extension; if OpenCode still exposes the old tool catalog, reconnect Browse in
+`/mcps`.
+
 Three systemd **user** services start at login:
 
 - `browse-relay.service`: the shared host relay on `127.0.0.1:19988`.

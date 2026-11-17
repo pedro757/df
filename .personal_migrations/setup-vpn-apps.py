@@ -7,8 +7,10 @@ import os
 from pathlib import Path
 import pwd
 import re
+import select
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -297,6 +299,15 @@ def browse_units(namespace, binary):
     }
 
 
+def relay_is_running(status):
+    relay = status.get("relay") or {}
+    if "running" in relay:
+        return relay["running"] is True
+    # Browse 0.1.0 reports the live relay's identity instead of a running flag.
+    # Browser connectivity is separate: a relay can be ready with all browsers closed.
+    return bool(relay.get("version")) and type(relay.get("pid")) is int and relay["pid"] > 0
+
+
 def browse_status(binary, browser=None):
     """Wait for observable startup/reconnection, not a fixed startup delay."""
     deadline = time.monotonic() + 30
@@ -305,7 +316,7 @@ def browse_status(binary, browser=None):
             result = host_run(binary, "status", "--json", capture_output=True, text=True)
             status = json.loads(result.stdout)
             connected = status.get("extension", {}).get("browsers", [])
-            if status.get("relay", {}).get("running") and (
+            if relay_is_running(status) and (
                 browser is None or any(value["id"] == browser and value["connected"] for value in connected)
             ):
                 return status
@@ -316,9 +327,21 @@ def browse_status(binary, browser=None):
         time.sleep(0.2)
 
 
-def setup_browse(namespace, paths, upgrade=False):
+def check_browse_environment():
     if os.environ.get("OPENCODE_BROWSER_HOME") or os.environ.get("OPENCODE_BROWSER_PORT", "19988") != "19988":
         raise RuntimeError("This shared relay uses standard Browse storage and port 19988; unset custom Browse home/port overrides.")
+
+
+def download_browse_binary():
+    # Download fully before execution, and avoid the installer's automatic relay
+    # upgrade: a systemd-owned foreground relay must be restarted by systemd.
+    with tempfile.TemporaryDirectory(prefix="browse-installer-") as temporary:
+        installer = Path(temporary) / "install.sh"
+        run("curl", "-fsSL", "https://opencode.ai/browse/install", "-o", installer)
+        run("bash", installer, "--no-setup")
+
+
+def check_browse_units(namespace, paths, required=False):
     binary = paths["bin"] / "browse"
     units = browse_units(namespace, binary)
     root = paths["config"] / "systemd/user"
@@ -326,6 +349,8 @@ def setup_browse(namespace, paths, upgrade=False):
         path = root / name
         if path.is_symlink():
             raise RuntimeError(f"Refusing a service symlink: {path}")
+        if required and not path.is_file():
+            raise RuntimeError(f"Shared relay service is missing: {name}. Run setup-vpn-apps.py browse first.")
         if path.exists():
             existing = path.read_text()
             expected = {
@@ -335,19 +360,141 @@ def setup_browse(namespace, paths, upgrade=False):
             }[name]
             if not any(value in existing for value in expected):
                 raise RuntimeError(f"Refusing an unrelated service: {path}")
+    return units
+
+
+def host_relay_pid():
+    # Inspect the host, not wgN's listener (which is the socat bridge).
+    result = host_run("/usr/bin/ss", "-H", "-ltnp", "( sport = :19988 )", capture_output=True, text=True)
+    if not result.stdout.strip():
+        return None
+    owners = {int(value) for value in re.findall(r"\bpid=(\d+)", result.stdout)}
+    if len(owners) != 1:
+        raise RuntimeError("Cannot safely identify the single owner of host port 19988; no process was signalled.")
+    return owners.pop()
+
+
+def stop_standalone_browse(pid, binary, proc_root=Path("/proc")):
+    """Stop only our verified Browse serve process, using a PID-reuse-safe handle."""
+    if not hasattr(os, "pidfd_open") or not hasattr(signal, "pidfd_send_signal"):
+        raise RuntimeError("Safe relay takeover requires Linux pidfd support. Stop the standalone relay manually.")
+    try:
+        descriptor = os.pidfd_open(pid)
+    except ProcessLookupError:
+        return
+    try:
+        if select.select([descriptor], [], [], 0)[0]:
+            return  # Already exited; never fall back to signalling a numeric PID.
+        process = proc_root / str(pid)
+        command = (process / "cmdline").read_bytes().rstrip(b"\0").split(b"\0")
+        executable = os.readlink(process / "exe").removesuffix(" (deleted)")
+        groups = [line.rsplit("/", 1)[-1] for line in (process / "cgroup").read_text().splitlines()]
+        if (
+            process.stat().st_uid != os.geteuid()
+            or executable != str(binary.resolve())
+            or len(command) != 2
+            or command[0] not in (os.fsencode(binary), b"browse")
+            or command[1] != b"serve"
+        ):
+            raise RuntimeError(f"Port 19988 belongs to an unverified process ({pid}); refusing to stop it.")
+        if any(group.endswith(".service") and group not in (
+            "browse-relay.service", f"user@{os.geteuid()}.service"
+        ) for group in groups):
+            raise RuntimeError(f"The competing Browse relay ({pid}) belongs to another service; stop its manager first.")
+        signal.pidfd_send_signal(descriptor, signal.SIGTERM)
+        if not select.select([descriptor], [], [], 10)[0]:
+            raise RuntimeError("Standalone Browse did not stop after SIGTERM; no force-kill attempted.")
+        print(f"Stopped standalone Browse relay {pid}; returning ownership to systemd.")
+    except ProcessLookupError:
+        return  # It exited naturally after its PID handle was opened.
+    except FileNotFoundError:
+        if select.select([descriptor], [], [], 0)[0]:
+            return
+        raise
+    finally:
+        os.close(descriptor)
+
+
+def restart_shared_browse(binary):
+    # Pause a possible EADDRINUSE restart loop before inspecting the conflicting
+    # listener. Do not call Browse's CLI in this gap: it could auto-start a daemon.
+    run("systemctl", "--user", "stop", "browse-relay.service")
+    pid = host_relay_pid()
+    if pid is not None:
+        stop_standalone_browse(pid, binary)
+    run("systemctl", "--user", "reset-failed", "browse-relay.service")
+    run("systemctl", "--user", "start", "browse-relay.service")
+
+
+def verify_browse_owner(status):
+    result = run("systemctl", "--user", "show", "--property=MainPID", "--value",
+                 "browse-relay.service", capture_output=True, text=True)
+    try:
+        managed_pid = int(result.stdout.strip())
+    except ValueError as error:
+        raise RuntimeError("Cannot verify browse-relay.service's process ID.") from error
+    listener_pid = host_relay_pid()
+    reported_pid = (status.get("relay") or {}).get("pid")
+    if managed_pid <= 0 or listener_pid != managed_pid or (
+        reported_pid is not None and reported_pid != managed_pid
+    ):
+        raise RuntimeError(
+            "The responding Browse relay is not the process owned by browse-relay.service. "
+            "Check its logs and the owner of host port 19988."
+        )
+
+
+def update_browse(namespace, paths, restart_only=False):
+    check_browse_environment()
+    units = check_browse_units(namespace, paths, required=True)
+    binary = paths["bin"] / "browse"
+    if restart_only:
+        if not binary.is_file():
+            raise RuntimeError(f"Browse is not installed at {binary}; omit --restart-only to download it.")
+    else:
+        download_browse_binary()
+
+    restart_shared_browse(binary)
+    run("systemctl", "--user", "enable", "--now", *units)
+    status = browse_status(binary)
+    cli_version = run(binary, "--version", capture_output=True, text=True).stdout.strip()
+    relay = status.get("relay", {})
+    if relay.get("version") != cli_version or relay.get("stale"):
+        raise RuntimeError(
+            f"Browse CLI is {cli_version}, but the relay is {relay.get('version', 'unknown')} "
+            "(or a different build). Check journalctl --user -u browse-relay.service."
+        )
+    # is-active with several names succeeds if *any* unit is active, not all.
+    for name in units:
+        run("systemctl", "--user", "is-active", "--quiet", name)
+    # Extensions reconnect asynchronously after the relay starts. Do not report
+    # the earlier startup snapshot after the version and service checks complete.
+    status = browse_status(binary)
+    verify_browse_owner(status)
+    print(f"Browse CLI and shared relay updated to {cli_version}. Pairings and bridge configuration preserved.")
+    connected = {value["id"] for value in status.get("extension", {}).get("browsers", []) if value["connected"]}
+    for browser in ("brave", "brave-vpn"):
+        if browser in connected:
+            print(f"  {browser}: connected")
+        else:
+            print(f"  {browser}: not connected yet; open that profile and reload its Browse extension if needed.")
+
+
+def setup_browse(namespace, paths, upgrade=False):
+    check_browse_environment()
+    binary = paths["bin"] / "browse"
+    units = check_browse_units(namespace, paths)
+    root = paths["config"] / "systemd/user"
     installed = binary.is_file()
     if upgrade or not installed:
-        # Same official installer as curl | bash, but fail before execution if curl
-        # fails, and defer interactive pairing until the host relay is supervised.
-        with tempfile.TemporaryDirectory(prefix="browse-installer-") as temporary:
-            installer = Path(temporary) / "install.sh"
-            run("curl", "-fsSL", "https://opencode.ai/browse/install", "-o", installer)
-            run("bash", installer, "--no-setup")
+        download_browse_binary()
+    status_unavailable = False
     try:
         existing = json.loads(host_run(binary, "status", "--json", capture_output=True, text=True).stdout)
     except subprocess.CalledProcessError:
         existing = {}
-    if existing.get("relay", {}).get("running"):
+        status_unavailable = True
+    if relay_is_running(existing):
         try:
             run("systemctl", "--user", "is-active", "--quiet", "browse-relay.service",
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -375,10 +522,12 @@ def setup_browse(namespace, paths, upgrade=False):
             changed.append(name)
     run("systemctl", "--user", "daemon-reload")
     run("systemctl", "--user", "enable", "--now", *units)
+    if upgrade or status_unavailable:
+        run("systemctl", "--user", "restart", "browse-relay.service")
     status = browse_status(binary)
     cli_version = run(binary, "--version", capture_output=True, text=True).stdout.strip()
     relay = status.get("relay", {})
-    if "browse-relay.service" in changed or upgrade or hostname_changed or relay.get("stale") or relay.get("version") != cli_version:
+    if (not (upgrade or status_unavailable) and ("browse-relay.service" in changed or hostname_changed)) or relay.get("stale") or relay.get("version") != cli_version:
         run("systemctl", "--user", "restart", "browse-relay.service")
     for name in changed:
         if name != "browse-relay.service":
@@ -447,6 +596,10 @@ def check_commands(args):
         commands += ["opencode", "tailscale", "fish", "jq", "openssl", "flock"]
     if args.action == "browse" or (args.action == "install" and not args.skip_browse):
         commands += ["curl", "socat", "systemctl", "systemd-run", "bash"]
+    if args.action == "update-browse":
+        commands += ["systemctl", "systemd-run", "ss"]
+        if not args.restart_only:
+            commands += ["curl", "bash"]
     for command in commands:
         if not shutil.which(command):
             raise RuntimeError(f"Required command not found: {command}")
@@ -457,7 +610,7 @@ def main(arguments=None):
         description="Set up VPN app launchers, OpenCode Tailscale access and one Browse relay for both Brave profiles.",
         epilog="Run in an independent desktop terminal, not as root. Replacement affects desktop/menu/URL launchers, not direct execution of packaged binaries.",
     )
-    parser.add_argument("action", nargs="?", choices=("install", "launcher", "browse", "pair"), default="install")
+    parser.add_argument("action", nargs="?", choices=("install", "launcher", "browse", "pair", "update-browse"), default="install")
     parser.add_argument("label", nargs="?", help="pair: brave or brave-vpn")
     parser.add_argument("--namespace", default="wg2")
     parser.add_argument("--app", action="append", default=[], help="Add a separate VPN launcher; repeat for multiple desktop IDs/paths (default: brave).")
@@ -469,6 +622,7 @@ def main(arguments=None):
     parser.add_argument("--opencode-bridge-port", type=int, default=4097)
     parser.add_argument("--opencode-https-port", type=int, default=8443, help="Use a separate Tailscale HTTPS port so T3 can keep port 443.")
     parser.add_argument("--upgrade-browse", action="store_true", help="Download the current Browse binary even if already installed.")
+    parser.add_argument("--restart-only", action="store_true", help="update-browse: reload the already installed binary instead of downloading it again.")
     parser.add_argument("--dry-run", action="store_true", help="Print the plan without downloads, file writes, authorization or service changes.")
     args = parser.parse_args(arguments)
     if os.geteuid() == 0:
@@ -477,6 +631,8 @@ def main(arguments=None):
         raise ValueError("Namespace must be wg2 through wg65535.")
     if args.restore and args.action != "launcher":
         parser.error("--restore is only valid with launcher.")
+    if args.restart_only and args.action != "update-browse":
+        parser.error("--restart-only is only valid with update-browse.")
     if args.label and args.action != "pair":
         parser.error("A browser label is only valid with pair.")
     if args.action == "pair" and args.label not in ("brave", "brave-vpn"):
@@ -489,6 +645,22 @@ def main(arguments=None):
     if args.opencode_backend_port == args.opencode_bridge_port:
         parser.error("OpenCode backend and bridge ports must differ.")
     paths = locations()
+    if args.action == "update-browse":
+        if args.dry_run:
+            print(json.dumps({
+                "binary": str(paths["bin"] / "browse"),
+                "installer": None if args.restart_only else "https://opencode.ai/browse/install",
+                "installer_arguments": [] if args.restart_only else ["--no-setup"],
+                "restart_relay_before_status": "browse-relay.service",
+                "take_over_verified_standalone_relay": True,
+                "verify_listener_matches_systemd_pid": True,
+                "ensure_services": list(browse_units(args.namespace, paths["bin"] / "browse")),
+                "preserve_pairings": True,
+            }, indent=2))
+            return
+        check_commands(args)
+        update_browse(args.namespace, paths, args.restart_only)
+        return
     if args.action == "pair":
         if args.dry_run:
             print(json.dumps({"pair": args.label, "relay": "host", "port": 19988}))

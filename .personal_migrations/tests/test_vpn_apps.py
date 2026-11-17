@@ -56,6 +56,43 @@ class VpnAppTests(unittest.TestCase):
         migration.install_launchers(plan, self.paths, state)
         return plan
 
+    def browse_installation(self):
+        binary = self.paths["bin"] / "browse"
+        binary.parent.mkdir(parents=True)
+        binary.touch(mode=0o755)
+        root = self.paths["config"] / "systemd/user"
+        for name, text in migration.browse_units("wg2", binary).items():
+            migration.write(root / name, text)
+        status = {
+            "connected": True,
+            "pairingState": "connected",
+            "relay": {
+                "version": "0.1.0", "endpoint": "http://127.0.0.1:19988",
+                "instanceId": "fixture-relay", "pid": 4242,
+            },
+            "extension": {"browsers": [
+                {"id": "brave", "connected": True},
+                {"id": "brave-vpn", "connected": True},
+            ]},
+        }
+        return binary, root, status
+
+    @staticmethod
+    def browse_command_result(*args, **kwargs):
+        output = "0.1.0\n" if args[-1] == "--version" else "4242\n" if "--property=MainPID" in args else ""
+        return subprocess.CompletedProcess(args, 0, stdout=output)
+
+    def standalone_process(self, pid=5252):
+        binary = self.paths["bin"] / "browse"
+        binary.parent.mkdir(parents=True)
+        binary.touch(mode=0o755)
+        process = self.root / "proc" / str(pid)
+        process.mkdir(parents=True)
+        (process / "cmdline").write_bytes(os.fsencode(binary) + b"\0serve\0")
+        (process / "exe").symlink_to(binary)
+        (process / "cgroup").write_text("0::/user.slice/app-terminal.scope\n")
+        return binary, process
+
     def test_brave_companion_keeps_host_launcher_and_isolates_all_vpn_actions(self):
         original = (
             "[Desktop Entry]\nName=Brave\nName[es]=Brave\nType=Application\n"
@@ -266,15 +303,17 @@ class VpnAppTests(unittest.TestCase):
         binary = self.paths["bin"] / "browse"
         binary.parent.mkdir(parents=True)
         binary.touch()
-        status = subprocess.CompletedProcess([], 0, stdout=json.dumps({"relay": {"running": True}}))
-        with (
-            patch.object(migration, "host_run", return_value=status),
-            patch.object(migration, "run", side_effect=subprocess.CalledProcessError(3, "systemctl")) as run,
-        ):
-            with self.assertRaisesRegex(RuntimeError, "standalone Browse relay"):
-                migration.setup_browse("wg2", self.paths)
-        self.assertEqual(run.call_count, 1)
-        self.assertFalse((self.paths["config"] / "systemd/user").exists())
+        for relay in ({"running": True}, {"version": "0.1.0", "pid": 4242}):
+            with self.subTest(relay=relay):
+                status = subprocess.CompletedProcess([], 0, stdout=json.dumps({"relay": relay}))
+                with (
+                    patch.object(migration, "host_run", return_value=status),
+                    patch.object(migration, "run", side_effect=subprocess.CalledProcessError(3, "systemctl")) as run,
+                ):
+                    with self.assertRaisesRegex(RuntimeError, "standalone Browse relay"):
+                        migration.setup_browse("wg2", self.paths)
+                self.assertEqual(run.call_count, 1)
+                self.assertFalse((self.paths["config"] / "systemd/user").exists())
 
     def test_unrelated_service_is_not_replaced(self):
         root = self.paths["config"] / "systemd/user"
@@ -321,6 +360,310 @@ class VpnAppTests(unittest.TestCase):
         with patch.object(migration, "host_run", side_effect=responses), patch.object(migration.time, "sleep"):
             status = migration.browse_status(self.paths["bin"] / "browse", browser="brave")
         self.assertTrue(status["extension"]["browsers"][0]["connected"])
+
+    def test_browse_readiness_accepts_real_010_status_without_running_field(self):
+        binary, _, expected = self.browse_installation()
+        response = subprocess.CompletedProcess([], 0, stdout=json.dumps(expected))
+        # A false not-ready result must fail immediately, not spend 30 real seconds.
+        with (
+            patch.object(migration, "host_run", return_value=response),
+            patch.object(migration.time, "monotonic", side_effect=[0, 31]),
+        ):
+            self.assertEqual(migration.browse_status(binary), expected)
+
+    def test_browse_readiness_distinguishes_offline_browsers_from_an_absent_relay(self):
+        binary, _, expected = self.browse_installation()
+        expected["connected"] = False
+        expected["extension"]["browsers"] = []
+        with patch.object(migration, "host_run", return_value=subprocess.CompletedProcess([], 0, stdout=json.dumps(expected))):
+            self.assertEqual(migration.browse_status(binary), expected)
+        for relay in (None, {}, {"version": "0.1.0", "pid": 0}, {"running": False, "version": "0.1.0", "pid": 4242}):
+            with self.subTest(relay=relay):
+                response = subprocess.CompletedProcess([], 0, stdout=json.dumps({"relay": relay}))
+                with (
+                    patch.object(migration, "host_run", return_value=response),
+                    patch.object(migration.time, "monotonic", side_effect=[0, 31]),
+                ):
+                    with self.assertRaisesRegex(RuntimeError, "did not become ready"):
+                        migration.browse_status(binary)
+
+    def test_update_downloads_without_setup_and_restarts_before_talking_to_old_relay(self):
+        binary, root, status = self.browse_installation()
+        preserved = {
+            root / name: (root / name).read_bytes() for name in migration.browse_units("wg2", binary)
+        }
+        for path, text in (
+            (self.paths["config"] / "opencode/opencode.jsonc", "// existing user configuration\n"),
+            (self.paths["data"] / "browse/browsers.json", '{"profile": {"id": "brave"}}\n'),
+            (self.paths["data"] / "browse/browser-tokens.json", '{"fixture": "unchanged-pairing"}\n'),
+        ):
+            migration.write(path, text, 0o600)
+            preserved[path] = path.read_bytes()
+        events = []
+        restarted = False
+
+        def command(*args, **kwargs):
+            nonlocal restarted
+            events.append(("command", args))
+            if args == ("systemctl", "--user", "start", "browse-relay.service"):
+                restarted = True
+            return self.browse_command_result(*args, **kwargs)
+
+        def host(*args, **kwargs):
+            events.append(("host", args))
+            if args[0] == "/usr/bin/ss":
+                output = 'LISTEN 0 128 127.0.0.1:19988 0.0.0.0:* users:(("browse",pid=4242,fd=9))\n' if restarted else ""
+                return subprocess.CompletedProcess(args, 0, stdout=output)
+            self.assertTrue(restarted, "Browse 0.1.0 cannot query the old 0.0.17 foreground relay.")
+            return subprocess.CompletedProcess(args, 0, stdout=json.dumps(status))
+
+        output = io.StringIO()
+        with patch.object(migration, "run", side_effect=command) as run, patch.object(migration, "host_run", side_effect=host), redirect_stdout(output):
+            migration.update_browse("wg2", self.paths)
+        self.assertEqual(events[0][1][:3], ("curl", "-fsSL", "https://opencode.ai/browse/install"))
+        self.assertEqual(events[1][1][0], "bash")
+        self.assertEqual(events[1][1][-1], "--no-setup")
+        self.assertEqual(events[2], ("command", ("systemctl", "--user", "stop", "browse-relay.service")))
+        self.assertIn("brave: connected", output.getvalue())
+        self.assertIn("brave-vpn: connected", output.getvalue())
+        for name in migration.browse_units("wg2", binary):
+            run.assert_any_call("systemctl", "--user", "is-active", "--quiet", name)
+        for path, original in preserved.items():
+            self.assertEqual(path.read_bytes(), original)
+
+    def test_restart_only_recovers_already_updated_binary_and_reports_offline_browsers(self):
+        binary, _, status = self.browse_installation()
+        status["extension"]["browsers"] = []
+        status["connected"] = False
+        output = io.StringIO()
+
+        def result(*args, **kwargs):
+            return self.browse_command_result(*args, **kwargs)
+
+        with (
+            patch.object(migration, "run", side_effect=result) as run,
+            patch.object(migration, "host_run", return_value=subprocess.CompletedProcess([], 0, stdout=json.dumps(status))),
+            patch.object(migration, "host_relay_pid", side_effect=[None, 4242]),
+            redirect_stdout(output),
+        ):
+            migration.update_browse("wg2", self.paths, restart_only=True)
+        self.assertFalse(any(call.args[0] in ("curl", "bash") for call in run.call_args_list))
+        run.assert_any_call("systemctl", "--user", "start", "browse-relay.service")
+        self.assertIn("shared relay updated to 0.1.0", output.getvalue())
+        self.assertIn("brave: not connected yet", output.getvalue())
+        self.assertIn("brave-vpn: not connected yet", output.getvalue())
+
+    def test_update_reports_fresh_browser_connections_instead_of_startup_snapshot(self):
+        _, _, connected = self.browse_installation()
+        starting = {**connected, "connected": False, "extension": {"browsers": []}}
+        responses = [
+            subprocess.CompletedProcess([], 0, stdout=json.dumps(starting)),
+            subprocess.CompletedProcess([], 0, stdout=json.dumps(connected)),
+        ]
+        output = io.StringIO()
+        with (
+            patch.object(migration, "run", side_effect=self.browse_command_result),
+            patch.object(migration, "host_run", side_effect=responses),
+            patch.object(migration, "host_relay_pid", side_effect=[None, 4242]),
+            redirect_stdout(output),
+        ):
+            migration.update_browse("wg2", self.paths, restart_only=True)
+        self.assertIn("brave: connected", output.getvalue())
+        self.assertIn("brave-vpn: connected", output.getvalue())
+        self.assertNotIn("not connected yet", output.getvalue())
+
+    def test_update_failed_download_keeps_running_relay_untouched(self):
+        self.browse_installation()
+        with patch.object(migration, "run", side_effect=subprocess.CalledProcessError(22, "curl")) as run:
+            with self.assertRaises(subprocess.CalledProcessError):
+                migration.update_browse("wg2", self.paths)
+        self.assertEqual(run.call_count, 1)
+        self.assertEqual(run.call_args.args[0], "curl")
+
+    def test_update_refuses_missing_or_unrelated_relay_units_before_download(self):
+        with patch.object(migration, "run") as run:
+            with self.assertRaisesRegex(RuntimeError, "missing"):
+                migration.update_browse("wg2", self.paths)
+        run.assert_not_called()
+        _, root, _ = self.browse_installation()
+        migration.write(root / "browse-relay.service", "[Service]\nExecStart=/unrelated/application\n")
+        with patch.object(migration, "run") as run:
+            with self.assertRaisesRegex(RuntimeError, "unrelated"):
+                migration.update_browse("wg2", self.paths)
+        run.assert_not_called()
+
+    def test_update_detects_stale_relay_or_failed_namespace_bridge(self):
+        binary, _, status = self.browse_installation()
+        status["relay"]["version"] = "0.0.17"
+
+        def command(*args, **kwargs):
+            if args[-1] == "browse-wg2-local.service" and "is-active" in args:
+                raise subprocess.CalledProcessError(3, args)
+            return subprocess.CompletedProcess(args, 0, stdout="0.1.0\n")
+
+        def host(*args, **kwargs):
+            return subprocess.CompletedProcess(args, 0, stdout=json.dumps(status))
+
+        with (
+            patch.object(migration, "run", side_effect=command),
+            patch.object(migration, "host_run", side_effect=host),
+            patch.object(migration, "host_relay_pid", return_value=None),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "CLI is 0.1.0, but the relay is 0.0.17"):
+                migration.update_browse("wg2", self.paths, restart_only=True)
+            status["relay"]["version"] = "0.1.0"
+            with self.assertRaises(subprocess.CalledProcessError):
+                migration.update_browse("wg2", self.paths, restart_only=True)
+
+    def test_update_dry_run_does_not_download_or_change_services(self):
+        output = io.StringIO()
+        with patch.object(migration.os, "geteuid", return_value=1000), patch.object(migration, "run") as run, redirect_stdout(output):
+            migration.main(["update-browse", "--restart-only", "--dry-run"])
+        run.assert_not_called()
+        self.assertFalse(self.home.exists())
+        plan = json.loads(output.getvalue())
+        self.assertIsNone(plan["installer"])
+        self.assertEqual(plan["restart_relay_before_status"], "browse-relay.service")
+        self.assertTrue(plan["preserve_pairings"])
+        self.assertTrue(plan["take_over_verified_standalone_relay"])
+        self.assertTrue(plan["verify_listener_matches_systemd_pid"])
+
+    def test_takeover_stops_restart_loop_before_releasing_verified_standalone_port(self):
+        events = []
+        with (
+            patch.object(migration, "run", side_effect=lambda *args, **kwargs: events.append(args)),
+            patch.object(migration, "host_relay_pid", return_value=5252),
+            patch.object(migration, "stop_standalone_browse", side_effect=lambda *args: events.append(("terminate", *args))) as stop,
+        ):
+            binary = self.paths["bin"] / "browse"
+            migration.restart_shared_browse(binary)
+        self.assertEqual(events, [
+            ("systemctl", "--user", "stop", "browse-relay.service"),
+            ("terminate", 5252, binary),
+            ("systemctl", "--user", "reset-failed", "browse-relay.service"),
+            ("systemctl", "--user", "start", "browse-relay.service"),
+        ])
+        stop.assert_called_once_with(5252, binary)
+
+    def test_refused_takeover_leaves_restart_loop_stopped_without_starting_another_relay(self):
+        with (
+            patch.object(migration, "run") as run,
+            patch.object(migration, "host_relay_pid", return_value=5252),
+            patch.object(migration, "stop_standalone_browse", side_effect=RuntimeError("unverified process")),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "unverified"):
+                migration.restart_shared_browse(self.paths["bin"] / "browse")
+        run.assert_called_once_with("systemctl", "--user", "stop", "browse-relay.service")
+
+    def test_standalone_takeover_uses_pidfd_and_graceful_term_for_current_or_deleted_binary(self):
+        binary, process = self.standalone_process()
+        for deleted in (False, True):
+            with self.subTest(deleted=deleted):
+                (process / "exe").unlink()
+                (process / "exe").symlink_to(str(binary) + (" (deleted)" if deleted else ""))
+                with (
+                    patch.object(migration.os, "pidfd_open", return_value=101),
+                    patch.object(migration.signal, "pidfd_send_signal") as signal,
+                    patch.object(migration.select, "select", side_effect=[([], [], []), ([101], [], [])]),
+                    patch.object(migration.os, "close") as close,
+                    patch.object(migration.os, "kill") as numeric_kill,
+                    redirect_stdout(io.StringIO()),
+                ):
+                    migration.stop_standalone_browse(5252, binary, proc_root=process.parent)
+                signal.assert_called_once_with(101, migration.signal.SIGTERM)
+                close.assert_called_once_with(101)
+                numeric_kill.assert_not_called()
+
+    def test_takeover_refuses_other_executable_command_user_or_service_without_signalling(self):
+        binary, process = self.standalone_process()
+        for mismatch in ("executable", "command", "user", "service"):
+            with self.subTest(mismatch=mismatch):
+                (process / "exe").unlink()
+                (process / "exe").symlink_to(self.root / "unrelated" if mismatch == "executable" else binary)
+                (process / "cmdline").write_bytes(os.fsencode(binary) + (b"\0install\0" if mismatch == "command" else b"\0serve\0"))
+                (process / "cgroup").write_text("0::/user.slice/other-relay.service\n" if mismatch == "service" else "0::/user.slice/app-terminal.scope\n")
+                uid = process.stat().st_uid + (1 if mismatch == "user" else 0)
+                with (
+                    patch.object(migration.os, "pidfd_open", return_value=101),
+                    patch.object(migration.os, "geteuid", return_value=uid),
+                    patch.object(migration.signal, "pidfd_send_signal") as signal,
+                    patch.object(migration.select, "select", return_value=([], [], [])),
+                    patch.object(migration.os, "close"),
+                    patch.object(migration.os, "kill") as numeric_kill,
+                ):
+                    with self.assertRaisesRegex(RuntimeError, "unverified process|another service"):
+                        migration.stop_standalone_browse(5252, binary, proc_root=process.parent)
+                signal.assert_not_called()
+                numeric_kill.assert_not_called()
+
+    def test_takeover_does_not_escalate_to_force_kill_when_graceful_shutdown_times_out(self):
+        binary, process = self.standalone_process()
+        with (
+            patch.object(migration.os, "pidfd_open", return_value=101),
+            patch.object(migration.signal, "pidfd_send_signal") as signal,
+            patch.object(migration.select, "select", return_value=([], [], [])),
+            patch.object(migration.os, "close"),
+            patch.object(migration.os, "kill") as numeric_kill,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "no force-kill"):
+                migration.stop_standalone_browse(5252, binary, proc_root=process.parent)
+        signal.assert_called_once_with(101, migration.signal.SIGTERM)
+        numeric_kill.assert_not_called()
+
+    def test_takeover_does_not_signal_a_numeric_pid_if_the_listener_already_exited(self):
+        with (
+            patch.object(migration.os, "pidfd_open", side_effect=ProcessLookupError),
+            patch.object(migration.signal, "pidfd_send_signal") as signal,
+            patch.object(migration.os, "kill") as numeric_kill,
+        ):
+            migration.stop_standalone_browse(5252, self.paths["bin"] / "browse")
+        signal.assert_not_called()
+        numeric_kill.assert_not_called()
+
+    def test_port_inspection_uses_host_and_refuses_unidentifiable_or_ambiguous_listeners(self):
+        for output, expected in (
+            ("", None),
+            ('LISTEN 0 128 127.0.0.1:19988 0.0.0.0:* users:(("browse",pid=5252,fd=9))\n', 5252),
+        ):
+            with patch.object(migration, "host_run", return_value=subprocess.CompletedProcess([], 0, stdout=output)) as host:
+                self.assertEqual(migration.host_relay_pid(), expected)
+            host.assert_called_once_with("/usr/bin/ss", "-H", "-ltnp", "( sport = :19988 )", capture_output=True, text=True)
+        for output in (
+            "LISTEN 0 128 127.0.0.1:19988 0.0.0.0:*\n",
+            'LISTEN users:(("browse",pid=5252,fd=9))\nLISTEN users:(("other",pid=6363,fd=9))\n',
+        ):
+            with patch.object(migration, "host_run", return_value=subprocess.CompletedProcess([], 0, stdout=output)):
+                with self.assertRaisesRegex(RuntimeError, "Cannot safely identify"):
+                    migration.host_relay_pid()
+
+    def test_owner_verification_rejects_same_version_standalone_even_if_unit_is_starting(self):
+        for managed, listener, reported in ((0, 5252, 5252), (4242, 5252, 5252), (4242, 4242, 5252)):
+            with self.subTest(managed=managed, listener=listener, reported=reported):
+                with (
+                    patch.object(migration, "run", return_value=subprocess.CompletedProcess([], 0, stdout=f"{managed}\n")),
+                    patch.object(migration, "host_relay_pid", return_value=listener),
+                ):
+                    with self.assertRaisesRegex(RuntimeError, "not the process owned"):
+                        migration.verify_browse_owner({"relay": {"version": "0.1.2", "pid": reported}})
+
+    def test_setup_upgrade_also_restarts_protocol_incompatible_relay_before_waiting(self):
+        binary, _, status = self.browse_installation()
+        restarted = False
+
+        def command(*args, **kwargs):
+            nonlocal restarted
+            if args == ("systemctl", "--user", "restart", "browse-relay.service"):
+                restarted = True
+            return subprocess.CompletedProcess(args, 0, stdout="0.1.0\n")
+
+        def host(*args, **kwargs):
+            if not restarted:
+                raise subprocess.CalledProcessError(1, args, stderr="older foreground relay")
+            return subprocess.CompletedProcess(args, 0, stdout=json.dumps(status))
+
+        with patch.object(migration, "run", side_effect=command), patch.object(migration, "host_run", side_effect=host), redirect_stdout(io.StringIO()):
+            migration.setup_browse("wg2", self.paths, upgrade=True)
+        self.assertTrue(restarted)
 
     def test_opencode_tailscale_rejects_foreign_route_but_allows_own_or_other_port(self):
         # Run the real shell preflight and jq parser, but make every other external
