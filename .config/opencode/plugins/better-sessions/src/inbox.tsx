@@ -255,6 +255,34 @@ export function createInbox(context: Context, options: Options) {
     return snoozeBlocker(signals(id))
   }
 
+  /** Settles every session that can be settled, in one write. Running sessions are skipped. */
+  function settleMany(ids: readonly string[]) {
+    const ready = ids.filter((id) => !settleBlocker(signals(id)))
+    if (ready.length > 0) {
+      const time = Date.now()
+      setNow(time)
+      void write((draft) => {
+        for (const id of ready) draft.sessions[id] = { state: "settled", at: time }
+      })
+    }
+    return { done: ready.length, skipped: ids.length - ready.length }
+  }
+
+  /** Snoozes every session that can be snoozed, in one write. Sessions waiting on a permission are skipped. */
+  function snoozeMany(ids: readonly string[], until: number) {
+    if (!(until > Date.now())) return { done: 0, skipped: 0, error: "Pick a time in the future" }
+    const ready = ids.map((id) => ({ id, live: signals(id) })).filter((item) => !snoozeBlocker(item.live))
+    if (ready.length > 0) {
+      const time = Date.now()
+      setNow(time)
+      void write((draft) => {
+        for (const { id, live } of ready)
+          draft.sessions[id] = { state: "snoozed", at: time, until, forms: live.formIDs, permissions: live.permissionIDs }
+      })
+    }
+    return { done: ready.length, skipped: ids.length - ready.length, error: undefined }
+  }
+
   /** Clears the woke flag once the user looks at the session. */
   function visit(id: string) {
     const current = state.sessions?.[id]
@@ -414,9 +442,11 @@ export function createInbox(context: Context, options: Options) {
     placement,
     entry,
     settle,
+    settleMany,
     canSettle,
     restore,
     snooze,
+    snoozeMany,
     canSnooze,
     visit,
     forget,

@@ -44,12 +44,22 @@ const MAX_PAGES = 6
 
 type View =
   | { readonly type: "list" }
-  | { readonly type: "snooze"; readonly sessionID: string; readonly standalone?: boolean }
-  | { readonly type: "custom"; readonly sessionID: string; readonly standalone?: boolean; readonly error?: string }
+  | ({ readonly type: "snooze" } & SnoozeTarget)
+  | ({ readonly type: "custom"; readonly error?: string } & SnoozeTarget)
   | { readonly type: "rename"; readonly sessionID: string; readonly title: string; readonly error?: string }
   | { readonly type: "help"; readonly groups: readonly HelpGroup[] }
 
 type Row = { session: SessionInfo; signals: Signals; placement: Placement }
+
+/** The sessions a snooze applies to: one, or every session shown in the tab ("snooze all"). */
+type SnoozeTarget = {
+  readonly sessionIDs: readonly string[]
+  /** Snooze all. `skipped` counts the shown sessions left out because they wait on a permission. */
+  readonly bulk?: { readonly skipped: number }
+  readonly standalone?: boolean
+}
+
+const sessionCount = (count: number) => `${count} session${count === 1 ? "" : "s"}`
 
 export type DialogStart = { readonly view: "snooze"; readonly sessionID: string }
 
@@ -74,7 +84,7 @@ export function InboxDialog(props: { inbox: Inbox; options: Options; start?: Dia
   const allProjects = () => inbox.state.allProjects ?? hostAllProjects
 
   const [view, setView] = createSignal<View>(
-    props.start ? { type: "snooze", sessionID: props.start.sessionID, standalone: true } : { type: "list" },
+    props.start ? { type: "snooze", sessionIDs: [props.start.sessionID], standalone: true } : { type: "list" },
   )
   const [tab, setTab] = createSignal<Tab>("active")
   const [filter, setFilter] = createSignal("")
@@ -281,6 +291,13 @@ export function InboxDialog(props: { inbox: Inbox; options: Options; start?: Dia
         ],
       },
       {
+        title: "Every session shown in the tab",
+        rows: [
+          row("better_sessions.settle_all", "Settle all (running ones stay)"),
+          row("better_sessions.snooze_all", "Snooze all…"),
+        ],
+      },
+      {
         title: "List",
         rows: [
           row("better_sessions.tab.next", "Next tab"),
@@ -395,7 +412,46 @@ export function InboxDialog(props: { inbox: Inbox; options: Options; start?: Dia
       return
     }
     setLastSelected(id)
-    setView({ type: "snooze", sessionID: id, standalone })
+    setView({ type: "snooze", sessionIDs: [id], standalone })
+  }
+
+  /** The sessions shown in the tab, search included: what "settle all" and "snooze all" act on. */
+  const shownIDs = () => options().map((option) => option.value)
+
+  function settleAll() {
+    setToDelete(undefined)
+    const ids = shownIDs()
+    if (ids.length === 0) {
+      context.ui.toast.show({ message: "No sessions to settle", variant: "info" })
+      return
+    }
+    const { done, skipped } = inbox.settleMany(ids)
+    if (done === 0) {
+      context.ui.toast.show({ message: `${sessionCount(skipped)} still running. Settle them once they finish`, variant: "warning" })
+      return
+    }
+    context.ui.toast.show({
+      message: `Settled ${sessionCount(done)}` + (skipped ? `. ${skipped} still running stayed in ${TAB_LABEL[tab()]}` : ""),
+      variant: "success",
+    })
+  }
+
+  function snoozeAll() {
+    setToDelete(undefined)
+    const ids = shownIDs()
+    if (ids.length === 0) {
+      context.ui.toast.show({ message: "No sessions to snooze", variant: "info" })
+      return
+    }
+    const ready = ids.filter((id) => !inbox.canSnooze(id))
+    if (ready.length === 0) {
+      context.ui.toast.show({
+        message: `${sessionCount(ids.length)} waiting on a permission. Answer them before snoozing`,
+        variant: "warning",
+      })
+      return
+    }
+    setView({ type: "snooze", sessionIDs: ready, bulk: { skipped: ids.length - ready.length } })
   }
 
   function backToList(standalone?: boolean) {
@@ -406,10 +462,24 @@ export function InboxDialog(props: { inbox: Inbox; options: Options; start?: Dia
     setView({ type: "list" })
   }
 
-  function applySnooze(id: string, until: number, standalone?: boolean) {
-    const error = inbox.snooze(id, until)
+  function applySnooze(target: SnoozeTarget, until: number) {
+    if (target.bulk) {
+      const result = inbox.snoozeMany(target.sessionIDs, until)
+      if (result.error) return result.error
+      if (result.done === 0) return "None of these sessions can be snoozed right now"
+      const skipped = result.skipped + target.bulk.skipped
+      setView({ type: "list" })
+      context.ui.toast.show({
+        message:
+          `Snoozed ${sessionCount(result.done)} until ${formatWake(until, Date.now())}` +
+          (skipped ? `. ${skipped} waiting on a permission stayed in ${TAB_LABEL[tab()]}` : ""),
+        variant: "success",
+      })
+      return undefined
+    }
+    const error = inbox.snooze(target.sessionIDs[0]!, until)
     if (error) return error
-    if (standalone) {
+    if (target.standalone) {
       context.ui.toast.show({ message: `Snoozed until ${formatWake(until, Date.now())}`, variant: "success" })
       context.ui.dialog.clear()
       return
@@ -417,6 +487,10 @@ export function InboxDialog(props: { inbox: Inbox; options: Options; start?: Dia
     setView({ type: "list" })
     return undefined
   }
+
+  /** What the snooze views say they apply to. */
+  const targetLabel = (target: SnoozeTarget, length: number) =>
+    target.bulk ? `${sessionCount(target.sessionIDs.length)} in ${TAB_LABEL[tab()]}` : truncate(titleOf(target.sessionIDs[0]!), length)
 
   const actions = createMemo((): SelectAction<string>[] => {
     const active = tab()
@@ -433,6 +507,21 @@ export function InboxDialog(props: { inbox: Inbox; options: Options; start?: Dia
         title: "snooze",
         bind: keys.snooze,
         onTrigger: (option) => openSnooze(option.value),
+      },
+      {
+        command: "better_sessions.snooze_all",
+        title: "snooze all",
+        bind: keys.snoozeAll,
+        selection: "none",
+        onTrigger: () => snoozeAll(),
+      },
+      {
+        command: "better_sessions.settle_all",
+        title: "settle all",
+        bind: keys.settleAll,
+        selection: "none",
+        hidden: active === "settled",
+        onTrigger: () => settleAll(),
       },
       {
         command: "better_sessions.settle",
@@ -656,18 +745,21 @@ export function InboxDialog(props: { inbox: Inbox; options: Options; start?: Dia
             placeholder="45m, 2h, 3d, 14:00, tomorrow 09:00 or 2026-11-10 14:00"
             description={() => (
               <text fg={theme().text.muted} wrapMode="word">
-                {truncate(titleOf(current().sessionID), 54)}
+                {targetLabel(current(), 54)}
               </text>
             )}
             error={current().error}
-            onCancel={() => setView({ type: "snooze", sessionID: current().sessionID, standalone: current().standalone })}
+            onCancel={() => {
+              const { sessionIDs, bulk, standalone } = current()
+              setView({ type: "snooze", sessionIDs, bulk, standalone })
+            }}
             onConfirm={(value) => {
               const result = resolveCustomSnooze(value, new Date())
               if ("error" in result) {
                 setView({ ...current(), error: result.error })
                 return
               }
-              const error = applySnooze(current().sessionID, result.until, current().standalone)
+              const error = applySnooze(current(), result.until)
               if (error) setView({ ...current(), error })
             }}
           />
@@ -707,7 +799,8 @@ export function InboxDialog(props: { inbox: Inbox; options: Options; start?: Dia
 
   function SnoozePicker(pickerProps: { view: Extract<View, { type: "snooze" }> }) {
     const shown = createMemo(() => resolveSnoozePresets(new Date(inbox.clock()), props.options.snoozePresets))
-    const entry = () => inbox.entry(pickerProps.view.sessionID)
+    // A single session shows when it is already snoozed until; snooze all has no one wake time.
+    const entry = () => (pickerProps.view.bulk ? undefined : inbox.entry(pickerProps.view.sessionIDs[0]!))
     const pickerOptions = createMemo((): SelectOption<string>[] => [
       ...shown().map((preset) => ({ title: preset.label, value: preset.id, footer: preset.whenLabel })),
       { title: "Custom…", value: "custom", footer: "duration or time" },
@@ -725,7 +818,7 @@ export function InboxDialog(props: { inbox: Inbox; options: Options; start?: Dia
               Snooze
             </text>
             <text fg={theme().text.muted} wrapMode="none" overflow="hidden">
-              {" " + truncate(titleOf(pickerProps.view.sessionID), 40)}
+              {" " + targetLabel(pickerProps.view, 40)}
             </text>
           </box>
         }
@@ -746,7 +839,7 @@ export function InboxDialog(props: { inbox: Inbox; options: Options; start?: Dia
         onCancel={() => backToList(pickerProps.view.standalone)}
         onSelect={(option) => {
           if (option.value === "custom") {
-            setView({ type: "custom", sessionID: pickerProps.view.sessionID, standalone: pickerProps.view.standalone })
+            setView({ ...pickerProps.view, type: "custom" })
             return
           }
           const preset = pickSnoozePreset({
@@ -756,7 +849,7 @@ export function InboxDialog(props: { inbox: Inbox; options: Options; start?: Dia
             presets: props.options.snoozePresets,
           })
           if (!preset) return
-          const error = applySnooze(pickerProps.view.sessionID, preset.until, pickerProps.view.standalone)
+          const error = applySnooze(pickerProps.view, preset.until)
           if (error) context.ui.toast.show({ message: error, variant: "warning" })
         }}
       />

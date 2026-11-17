@@ -110,6 +110,8 @@ export function cursorStyle(config: CliConfig) {
 export interface Keybinds {
   readonly settle: string
   readonly snooze: string
+  readonly settleAll: string
+  readonly snoozeAll: string
   readonly restore: string
   readonly allProjects: string
   readonly delete: string
@@ -135,6 +137,9 @@ export interface Options {
 export const DEFAULT_KEYBINDS: Keybinds = {
   settle: "ctrl+e",
   snooze: "ctrl+t",
+  // Every session shown in the tab. Not ctrl+shift+e/t: terminals such as Ghostty keep those for splits and tabs.
+  settleAll: "alt+e",
+  snoozeAll: "alt+t",
   // ctrl+a toggles all projects, like the built-in list; ctrl+u is half page up.
   restore: "ctrl+g",
   allProjects: "ctrl+a",
@@ -170,6 +175,8 @@ export function parseOptions(input: Readonly<Record<string, unknown>>): Options 
     keybinds: {
       settle: key("settle"),
       snooze: key("snooze"),
+      settleAll: key("settleAll"),
+      snoozeAll: key("snoozeAll"),
       restore: key("restore"),
       allProjects: key("allProjects"),
       delete: key("delete"),

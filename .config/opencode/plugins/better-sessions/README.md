@@ -42,6 +42,9 @@ going, so it keeps its spinner.
 - **Snooze** (`ctrl+t`): pick a time (In 1 hour, In 3 hours, This evening, Tomorrow, Next week, or Custom… with
   `45m`, `2h`, `3d`, `1h30m`, `14:00`, `tomorrow 09:00`, `2026-11-10 14:00`).
 - **Restore** (`ctrl+g`): back to Active.
+- **Settle all** (`alt+e`) and **Snooze all** (`alt+t`): every session shown in the tab, so a search narrows them
+  down. Settle all leaves running sessions where they are; snooze all asks for one time and leaves sessions that
+  wait on a permission. A toast says how many moved and how many stayed.
 
 The same actions are in the command palette for the session you are in: "Settle session", "Snooze session…" and
 "Restore session to Active".
@@ -127,6 +130,8 @@ bound, so keys you changed in cli.json show up there. `esc`, `?` or `ctrl+/` goe
 | `tab` / `shift+tab`     | Next / previous tab                             | `nextTab` / `previousTab`     |
 | `ctrl+e`                | Settle                                          | `settle`                      |
 | `ctrl+t`                | Snooze                                          | `snooze`                      |
+| `alt+e`                 | Settle every session shown in the tab           | `settleAll`                   |
+| `alt+t`                 | Snooze every session shown in the tab           | `snoozeAll`                   |
 | `ctrl+g`                | Restore to Active                               | `restore`                     |
 | `ctrl+a`                | All projects / current directory                | `allProjects`                 |
 | `ctrl+x` (twice)        | Delete                                          | `delete`                      |
@@ -162,6 +167,8 @@ without configuration; add an entry only to change options:
         "keybinds": {
           "settle": "ctrl+e",
           "snooze": "ctrl+t",
+          "settleAll": "alt+e",
+          "snoozeAll": "alt+t",
           "restore": "ctrl+g",
           "allProjects": "ctrl+a",
           "delete": "ctrl+x",
