@@ -52,7 +52,8 @@
   },
   "plugins": [
     "-opencode.notifications",
-    "./herdr-opencode"
+    "./herdr-opencode",
+    "./activity-toggle"
   ],
   "animations": true,
   "prompt": {
