@@ -15,7 +15,10 @@
     "thinking": "show"
   },
   "tabs": {
-    "enabled": false
+    "enabled": false,
+    "layout": "vertical",
+    "mode": "off",
+    "indicators": "numbers"
   },
   "keybinds": {
     "app.exit": "ctrl+c,<leader>q",
@@ -43,10 +46,13 @@
     "prompt.autocomplete.next": "down,ctrl+n,ctrl+j",
     "prompt.autocomplete.select": "return,ctrl+l",
     "composer.subagent.interrupt": "ctrl+c",
-    "session.sidebar.toggle": "<leader>b"
+    "session.sidebar.toggle": "<leader>b",
+    "session.tab.next": "ctrl+tab,alt+down,alt+j",
+    "session.tab.previous": "ctrl+shift+tab,alt+up,alt+k"
   },
   "plugins": [
-    "-opencode.notifications"
+    "-opencode.notifications",
+    "./herdr-opencode"
   ],
   "animations": true,
   "prompt": {

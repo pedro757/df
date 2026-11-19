@@ -2,7 +2,7 @@
   "$schema": "https://opencode.ai/config.json",
   "agents": {
     "title": {
-      "model": "openai/gpt-5.6-luna"
+      "model": "openai/gpt-6-luna"
     }
   },
   "autoupdate": true,
@@ -11,6 +11,15 @@
     { "action": "shell", "resource": "rm -rf /", "effect": "deny" }
   ],
   "providers": {
+    // Workaround for https://github.com/anomalyco/opencode/issues/61020: the saved Claude Agent catalog
+    // is missing these windows, so they fall back to 200k and compaction starts at ~170k.
+    // Claude Code 2.1.322 reports 1M for both. Remove once the upstream fix ships.
+    "claude-agent": {
+      "models": {
+        "fable": { "limit": { "context": 1000000 } },
+        "claude-fable-5-1": { "limit": { "context": 1000000 } }
+      }
+    },
     "openrouter": {
       "models": {
         "openai/gpt-5.4": {
@@ -30,49 +39,6 @@
         },
       }
     },
-    // "openai": {
-    //   "models": {
-    //     "gpt-5.6-sol": {
-    //       "name": "GPT-5.6 Sol custom",
-    //       "settings": {
-    //         "service_tier": "flex"
-    //       },
-    //       "variants": [
-    //         { "id": "low" },
-    //         { "id": "medium" },
-    //         { "id": "high" },
-    //         { "id": "xhigh" },
-    //         { "id": "max" }
-    //       ]
-    //     },
-    //     "gpt-5.6-terra": {
-    //       "name": "GPT-5.6 Terra custom",
-    //       "settings": {
-    //         "service_tier": "flex"
-    //       },
-    //       "variants": [
-    //         { "id": "low" },
-    //         { "id": "medium" },
-    //         { "id": "high" },
-    //         { "id": "xhigh" },
-    //         { "id": "max" }
-    //       ]
-    //     },
-    //     "gpt-5.6-luna": {
-    //       "name": "GPT-5.6 Luna custom",
-    //       "settings": {
-    //         "service_tier": "flex"
-    //       },
-    //       "variants": [
-    //         { "id": "low" },
-    //         { "id": "medium" },
-    //         { "id": "high" },
-    //         { "id": "xhigh" },
-    //         { "id": "max" }
-    //       ]
-    //     },
-    //   }
-    // },
   },
   "lsp": {
     "custom-typescript": {

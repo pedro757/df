@@ -31,7 +31,7 @@ null_ls.setup({
     null_ls.builtins.code_actions.refactoring,
     null_ls.builtins.code_actions.gitsigns,
 
-    null_ls.builtins.formatting.sql_formatter,
+    -- null_ls.builtins.formatting.sql_formatter,
   },
 })
 
@@ -68,7 +68,7 @@ vim.lsp.enable("emmet_language_server")
 vim.lsp.enable("marksman")
 vim.lsp.enable("dockerls")
 vim.lsp.enable("prismals")
-vim.lsp.enable("sqlls")
+-- vim.lsp.enable("sqruff")
 
 vim.lsp.enable("jsonls")
 vim.lsp.enable("cssls")
