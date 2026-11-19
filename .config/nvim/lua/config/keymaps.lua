@@ -16,11 +16,27 @@ m("n", "<leader>c", ":nohl<cr>:redraw<cr>:<BS>", { desc = "Clear" })
 m("i", "<c-c>", "<Esc>", { remap = true })
 
 m("t", "<Esc>", [[<C-\><C-n>]])
+m("t", "jk", [[<C-\><C-n>]], { desc = "Exit Terminal Mode" })
 m("t", "<C-h>", [[<Cmd>wincmd h<CR>]])
 m("t", "<C-j>", [[<Cmd>wincmd j<CR>]])
 m("t", "<C-k>", [[<Cmd>wincmd k<CR>]])
 m("t", "::", [[<C-\><C-n>:]])
-m({ "n", "t" }, "<C-t>", ":TermNew cmd=fish<CR>", { silent = true, desc = "New Terminal" })
+m("n", "<leader>t", "<Cmd>TermSelect<CR>", { desc = "Select Terminal" })
+m({ "n", "t" }, "<C-t>", function()
+  local win = vim.api.nvim_get_current_win()
+  require("config.worktree").select_directory(function(dir)
+    -- The picker closes asynchronously; replace the window that launched it.
+    if not vim.api.nvim_win_is_valid(win) then
+      return
+    end
+    vim.api.nvim_set_current_win(win)
+    require("ergoterm").Terminal:new({
+      cmd = "fish",
+      dir = vim.fn.fnameescape(dir),
+      layout = "window",
+    }):focus()
+  end)
+end, { silent = true, desc = "New Terminal in Worktree" })
 
 m("n", "<leader>o", ":NeoZoomToggle<CR>zz", { desc = "Zoom", silent = true })
 m("n", "j", '(v:count > 5 ? "m\'" . v:count : "") . \'gj\'', { expr = true })

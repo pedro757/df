@@ -1,6 +1,5 @@
 local M = {}
 local did_setup = false
-local menu_win
 
 local function normalize_path(path)
   if not path or path == "" then
@@ -146,10 +145,10 @@ local function unlist_empty_fallback_buffers()
   end
 end
 
-local function sync_listed_buffers(git_worktree, metadata)
+local function sync_listed_buffers(prev_path, next_path)
   local skipped = {}
-  local prev_root = normalize_path(metadata.prev_path)
-  local next_root = normalize_path(git_worktree.get_worktree_path(metadata.path))
+  local prev_root = normalize_path(prev_path)
+  local next_root = normalize_path(next_path)
   if not next_root or prev_root == next_root then
     vim.cmd("silent! checktime")
     return
@@ -187,13 +186,14 @@ function M.setup(git_worktree)
       return
     end
 
-    sync_listed_buffers(git_worktree, metadata)
+    sync_listed_buffers(metadata.prev_path, git_worktree.get_worktree_path(metadata.path))
   end)
 end
 
 local function parse_worktrees(output)
   local worktrees = {}
   local current
+  local first = true
 
   local function add_current()
     if current and current.path and not current.bare and vim.fn.isdirectory(current.path) == 1 then
@@ -212,7 +212,8 @@ local function parse_worktrees(output)
 
       if key == "worktree" then
         add_current()
-        current = { path = value }
+        current = { path = value, primary = first }
+        first = false
       elseif current and key == "HEAD" then
         current.sha = value:sub(1, 7)
       elseif current and key == "branch" then
@@ -229,390 +230,214 @@ local function parse_worktrees(output)
   return worktrees
 end
 
-local function get_current_root()
-  local output = vim.fn.systemlist({ "git", "rev-parse", "--show-toplevel" })
-  if vim.v.shell_error ~= 0 then
-    return nil
+local function list_worktrees(cwd, opts)
+  local result = vim.system({ "git", "-C", cwd, "worktree", "list", "--porcelain", "-z" }, opts):wait()
+  if result.code ~= 0 then
+    return nil, vim.trim(result.stderr or "")
   end
-
-  return output[1]
+  return parse_worktrees(vim.split(result.stdout, "\0", { plain = true }))
 end
 
-local function menu_lines(worktrees, current_root)
-  local branch_width = 0
-  for _, worktree in ipairs(worktrees) do
-    branch_width = math.max(branch_width, vim.fn.strdisplaywidth(worktree.branch))
+local function get_current_root(cwd, opts)
+  local result = vim.system({ "git", "-C", cwd, "rev-parse", "--show-toplevel" }, opts):wait()
+  if result.code == 0 then
+    return (result.stdout:gsub("\n$", ""))
   end
-
-  local lines = {}
-  for _, worktree in ipairs(worktrees) do
-    local marker = worktree.path == current_root and "*" or " "
-    local path = vim.fn.fnamemodify(worktree.path, ":~")
-    local line = string.format("%s %-" .. branch_width .. "s  %s", marker, worktree.branch, path)
-    table.insert(lines, line)
-  end
-
-  return lines
 end
 
-function M.open_menu()
-  if menu_win and vim.api.nvim_win_is_valid(menu_win) then
-    vim.api.nvim_set_current_win(menu_win)
+local function prioritize_current(worktrees, current_root)
+  for i, worktree in ipairs(worktrees) do
+    if worktree.path == current_root then
+      if i > 1 then
+        table.remove(worktrees, i)
+        table.insert(worktrees, 1, worktree)
+      end
+      break
+    end
+  end
+end
+
+local function display_path(path)
+  return vim.fn.strtrans(vim.fn.fnamemodify(path, ":~"))
+end
+
+function M.select_directory(on_choice, picker_opts)
+  picker_opts = picker_opts or {}
+  local cwd = picker_opts.cwd or vim.fn.getcwd()
+  -- Discover the repository at cwd, not a Git directory inherited from dotfiles config.
+  local env = vim.fn.environ()
+  env.GIT_DIR = nil
+  env.GIT_WORK_TREE = nil
+  env.GIT_COMMON_DIR = nil
+  local opts = { clear_env = true, env = env }
+  local worktrees = list_worktrees(cwd, opts)
+  if not worktrees or #worktrees == 0 then
+    on_choice(cwd, false)
     return
   end
 
-  local git_worktree = require("git-worktree")
-  local output = vim.fn.systemlist({ "git", "worktree", "list", "--porcelain" })
-  if vim.v.shell_error ~= 0 then
-    vim.notify(table.concat(output, "\n"), vim.log.levels.ERROR)
-    return
-  end
-
-  local worktrees = parse_worktrees(output)
-  if #worktrees == 0 then
-    vim.notify("No git worktrees found", vim.log.levels.INFO)
-    return
-  end
-
-  local lines = menu_lines(worktrees, get_current_root())
-  local max_width = 0
-  for _, line in ipairs(lines) do
-    max_width = math.max(max_width, vim.fn.strdisplaywidth(line))
-  end
-
-  local width = math.min(math.max(max_width + 2, 50), math.max(vim.o.columns - 4, 20))
-  local height = math.min(#lines, math.max(vim.o.lines - 6, 1))
-  local row = math.max(math.floor((vim.o.lines - height) / 2) - 1, 0)
-  local col = math.max(math.floor((vim.o.columns - width) / 2), 0)
-
-  local buf = vim.api.nvim_create_buf(false, true)
-  vim.bo[buf].bufhidden = "wipe"
-  vim.bo[buf].buftype = "nofile"
-  vim.bo[buf].filetype = "git-worktree-menu"
-  vim.bo[buf].modifiable = true
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-  vim.bo[buf].modifiable = false
-
-  local menu_footer = " g<number> switch  <C-j>/<C-k> move  <CR>/<C-l> switch  <C-d> delete  q/<C-c>/<C-x> close "
-  local win = vim.api.nvim_open_win(buf, true, {
-    relative = "editor",
-    style = "minimal",
-    border = "rounded",
-    title = " Git Worktrees ",
-    title_pos = "center",
-    footer = menu_footer,
-    footer_pos = "center",
-    width = width,
-    height = height,
-    row = row,
-    col = col,
-  })
-  menu_win = win
-
-  vim.wo[win].cursorline = true
-  vim.wo[win].number = true
-  vim.wo[win].relativenumber = false
-  vim.wo[win].signcolumn = "no"
-  vim.wo[win].wrap = false
-
-  local pending_goto
-
-  local function clear_pending_goto()
-    pending_goto = nil
-    if vim.api.nvim_win_is_valid(win) then
-      vim.api.nvim_win_set_config(win, { footer = menu_footer })
-    end
-  end
-
-  local function close_menu()
-    pending_goto = nil
-    if vim.api.nvim_win_is_valid(win) then
-      vim.api.nvim_win_close(win, true)
-    end
-  end
-
-  local pending_delete
-  local force_delete_path
-  local deleting = false
-
-  local function set_menu_line(line, text)
-    if not vim.api.nvim_buf_is_valid(buf) then
-      return
-    end
-
-    vim.bo[buf].modifiable = true
-    vim.api.nvim_buf_set_lines(buf, line - 1, line, false, { text })
-    vim.bo[buf].modifiable = false
-  end
-
-  local function clear_pending_delete()
-    local pending = pending_delete
-    pending_delete = nil
-    if pending then
-      set_menu_line(pending.line, lines[pending.line])
-    end
-  end
-
-  local function show_pending_goto()
-    if pending_goto and vim.api.nvim_win_is_valid(win) then
-      local line = tonumber(pending_goto.digits)
-      if line and line >= 1 and line <= #worktrees then
-        vim.api.nvim_win_set_cursor(win, { line, 0 })
-      end
-
-      vim.api.nvim_win_set_config(win, {
-        footer = " Select worktree: " .. pending_goto.digits .. "  <CR> confirm  <Esc> cancel ",
-      })
-    end
-  end
-
-  local switch_selected
-
-  local function finish_goto()
-    local pending = pending_goto
-    if not pending then
-      return
-    end
-
-    clear_pending_goto()
-    if not vim.api.nvim_win_is_valid(win) or pending.digits == "" then
-      return
-    end
-
-    local line = tonumber(pending.digits)
-    if not line or line < 1 or line > #worktrees then
-      vim.notify("Worktree number must be between 1 and " .. #worktrees, vim.log.levels.WARN)
-      return
-    end
-
-    vim.api.nvim_win_set_cursor(win, { line, 0 })
-    switch_selected()
-  end
-
-  local function start_goto()
-    if deleting then
-      return
-    end
-
-    clear_pending_delete()
-    pending_goto = { digits = "" }
-    show_pending_goto()
-  end
-
-  local function goto_digit(digit)
-    if not pending_goto then
-      return digit
-    end
-
-    local pending = { digits = pending_goto.digits .. digit }
-    pending_goto = pending
-    vim.schedule(function()
-      if pending_goto == pending then
-        show_pending_goto()
-      end
-    end)
-    vim.defer_fn(function()
-      if pending_goto == pending then
-        finish_goto()
-      end
-    end, 1000)
-    return ""
-  end
-
-  local function refresh_menu(selected_line)
-    if not vim.api.nvim_win_is_valid(win) or not vim.api.nvim_buf_is_valid(buf) then
-      return
-    end
-
-    clear_pending_goto()
-    local refreshed = vim.fn.systemlist({ "git", "worktree", "list", "--porcelain" })
-    if vim.v.shell_error ~= 0 then
-      set_menu_line(selected_line, lines[selected_line])
-      vim.notify(table.concat(refreshed, "\n"), vim.log.levels.ERROR)
-      return
-    end
-
-    worktrees = parse_worktrees(refreshed)
-    if #worktrees == 0 then
-      close_menu()
-      return
-    end
-
-    lines = menu_lines(worktrees, get_current_root())
-    vim.bo[buf].modifiable = true
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-    vim.bo[buf].modifiable = false
-    local new_height = math.min(#lines, math.max(vim.o.lines - 6, 1))
-    vim.api.nvim_win_set_config(win, {
-      relative = "editor",
-      height = new_height,
-      row = math.max(math.floor((vim.o.lines - new_height) / 2) - 1, 0),
-      col = col,
-    })
-    vim.api.nvim_win_set_cursor(win, { math.min(selected_line, #worktrees), 0 })
-  end
-
-  local function refresh_missing_worktrees()
-    if not vim.api.nvim_win_is_valid(win) or not vim.api.nvim_buf_is_valid(buf) then
-      return
-    end
-
-    if not deleting then
-      for _, worktree in ipairs(worktrees) do
-        if vim.fn.isdirectory(worktree.path) ~= 1 then
-          local line = vim.api.nvim_win_get_cursor(win)[1]
-          clear_pending_delete()
-          refresh_menu(line)
-          break
-        end
-      end
-    end
-
-    if vim.api.nvim_win_is_valid(win) then
-      vim.defer_fn(refresh_missing_worktrees, 1000)
-    end
-  end
-
-  vim.defer_fn(refresh_missing_worktrees, 1000)
-
-  local function delete_selected()
-    if deleting or not vim.api.nvim_win_is_valid(win) then
-      return
-    end
-
-    clear_pending_goto()
-    local line = vim.api.nvim_win_get_cursor(win)[1]
-    local worktree = worktrees[line]
+  local current_root = get_current_root(cwd, opts)
+  prioritize_current(worktrees, current_root)
+  vim.ui.select(worktrees, {
+    prompt = picker_opts.prompt or "Terminal worktree",
+    format_item = function(worktree)
+      local marker = worktree.path == current_root and "* " or ""
+      return marker .. worktree.branch .. "  " .. display_path(worktree.path)
+    end,
+  }, function(worktree)
     if not worktree then
       return
     end
+    if vim.fn.isdirectory(worktree.path) ~= 1 then
+      vim.notify("Worktree directory no longer exists: " .. worktree.path, vim.log.levels.WARN)
+      return
+    end
+    on_choice(worktree.path, true)
+  end)
+end
 
-    local force = force_delete_path == worktree.path
-    if not pending_delete or pending_delete.path ~= worktree.path or pending_delete.force ~= force then
-      clear_pending_delete()
-      local confirmation = { path = worktree.path, line = line, force = force }
-      pending_delete = confirmation
-      local prompt = force and "! Press <C-d> again within 2s to FORCE delete " or "! Press <C-d> again within 2s to delete "
+function M.open_menu()
+  local existing = Snacks.picker.get({ source = "worktrees" })[1]
+  if existing then
+    existing:focus()
+    return
+  end
+
+  local cwd = vim.fn.getcwd()
+  local current_root = get_current_root(cwd)
+  local items
+  local pending, force_path
+  local deleting = false
+
+  local function notice(message, level)
+    vim.notify(message, level, { title = "Git Worktrees" })
+  end
+
+  local function refresh()
+    local worktrees, err = list_worktrees(cwd)
+    if not worktrees then
+      notice(err, vim.log.levels.ERROR)
+      return false
+    end
+    prioritize_current(worktrees, current_root)
+    items = vim.tbl_map(function(worktree)
+      worktree.label = worktree.branch == "(detached)" and ("(detached) " .. worktree.sha) or worktree.branch
+      worktree.display_path = display_path(worktree.path)
+      worktree.text = worktree.label .. " " .. worktree.display_path
+      return worktree
+    end, worktrees)
+    return true
+  end
+
+  if not refresh() then
+    return
+  elseif #items == 0 then
+    notice("No git worktrees found", vim.log.levels.INFO)
+    return
+  end
+
+  local function delete_worktree(picker, item)
+    if deleting or not item then
+      return
+    end
+    local path = item.path
+    if item.primary or path == current_root then
+      pending = nil
+      notice("Cannot delete the main or current worktree.", vim.log.levels.WARN)
+      return
+    end
+
+    local force = force_path == path
+    local now = vim.uv.hrtime()
+    if not pending or pending.path ~= path or pending.force ~= force or now >= pending.expires then
+      pending = { path = path, force = force, expires = now + 2e9 }
+      local action = force and "force-delete" or "delete"
       local warning = force and " (discards uncommitted changes)" or ""
-      set_menu_line(line, prompt .. worktree.branch .. warning)
-      vim.defer_fn(function()
-        if pending_delete == confirmation then
-          clear_pending_delete()
-        end
-      end, 2000)
+      notice("Press Ctrl+X again within 2s to " .. action .. " " .. item.label .. warning, vim.log.levels.WARN)
       return
     end
 
-    clear_pending_delete()
+    pending = nil
     deleting = true
-    set_menu_line(line, "Deleting " .. worktree.branch .. "...")
-    local callbacks = {
-      on_success = function()
-        deleting = false
-        force_delete_path = nil
-        refresh_menu(line)
-      end,
-      on_failure = vim.schedule_wrap(function()
-        deleting = false
-        force_delete_path = worktree.path
-        set_menu_line(
-          line,
-          "! Delete failed. Press <C-d> twice to FORCE delete " .. worktree.branch .. " (discards uncommitted changes)"
-        )
-      end),
-    }
-
-    local function remove_worktree()
-      git_worktree.delete_worktree(worktree.path, force, callbacks)
-    end
-
+    local args = { "git", "-C", cwd, "worktree", "remove" }
     if force then
-      remove_worktree()
-      return
+      args[#args + 1] = "--force"
     end
-
-    -- The plugin raises an error on failure even when on_failure is provided.
-    -- Handle dirty worktrees here so the expected refusal stays in the menu.
-    vim.system({ "git", "-C", worktree.path, "status", "--porcelain", "--untracked-files=normal" }, {
-      text = true,
-    }, vim.schedule_wrap(function(result)
-      if result.code == 0 and result.stdout ~= "" then
-        callbacks.on_failure()
+    vim.list_extend(args, { "--", path })
+    -- Let Git refuse dirty or locked worktrees; do not turn other errors into force requests.
+    vim.system(args, { text = true, env = { LC_ALL = "C" } }, vim.schedule_wrap(function(result)
+      deleting = false
+      local error_text = vim.trim(result.stderr or "")
+      if result.code == 0 then
+        force_path = nil
+        notice("Removed worktree " .. item.label, vim.log.levels.INFO)
+      elseif not force and error_text:find("contains modified or untracked files", 1, true) then
+        force_path = path
+        notice(
+          item.label .. " has uncommitted changes. Press Ctrl+X twice to force-delete and discard them.",
+          vim.log.levels.WARN
+        )
+        return
       else
-        remove_worktree()
+        force_path = nil
+        notice(error_text ~= "" and error_text or "Could not remove worktree " .. item.label, vim.log.levels.ERROR)
+      end
+
+      if not picker.closed and refresh() then
+        picker:refresh()
       end
     end))
   end
 
-  switch_selected = function()
-    if deleting or not vim.api.nvim_win_is_valid(win) then
-      return
-    end
-
-    clear_pending_goto()
-    local line = vim.api.nvim_win_get_cursor(win)[1]
-    local worktree = worktrees[line]
-    if not worktree then
-      return
-    end
-
-    if vim.fn.isdirectory(worktree.path) ~= 1 then
-      clear_pending_delete()
-      vim.notify(
-        "Worktree directory is missing: "
-          .. worktree.path
-          .. "\nIf it was permanently deleted, review stale entries with `git worktree prune --dry-run`.",
-        vim.log.levels.WARN
-      )
-      return
-    end
-
-    close_menu()
-    git_worktree.switch_worktree(worktree.path)
-  end
-
-  local function move_selection(offset)
-    if vim.api.nvim_win_is_valid(win) then
-      clear_pending_goto()
-      clear_pending_delete()
-      local line = vim.api.nvim_win_get_cursor(win)[1]
-      line = math.max(1, math.min(#worktrees, line + offset))
-      vim.api.nvim_win_set_cursor(win, { line, 0 })
-    end
-  end
-
-  local function opts(desc)
-    return { buffer = buf, silent = true, nowait = true, desc = desc }
-  end
-
-  vim.keymap.set("n", "<C-j>", function() move_selection(1) end, opts("Next worktree"))
-  vim.keymap.set("n", "<C-k>", function() move_selection(-1) end, opts("Previous worktree"))
-  vim.keymap.set("n", "g", start_goto, opts("Select worktree by number"))
-  for digit = 0, 9 do
-    local key = tostring(digit)
-    local digit_opts = opts("Enter worktree number digit")
-    digit_opts.expr = true
-    vim.keymap.set("n", key, function() return goto_digit(key) end, digit_opts)
-  end
-  vim.keymap.set("n", "<CR>", function()
-    if pending_goto then
-      finish_goto()
-    else
-      switch_selected()
-    end
-  end, opts("Confirm number or switch worktree"))
-  vim.keymap.set("n", "<C-l>", switch_selected, opts("Switch worktree"))
-  vim.keymap.set("n", "<C-d>", delete_selected, opts("Delete worktree"))
-  vim.keymap.set("n", "q", close_menu, opts("Close"))
-  vim.keymap.set("n", "<Esc>", function()
-    if pending_goto then
-      clear_pending_goto()
-    else
-      close_menu()
-    end
-  end, opts("Cancel goto or close"))
-  vim.keymap.set("n", "<C-c>", close_menu, opts("Close"))
-  vim.keymap.set("n", "<C-x>", close_menu, opts("Close"))
+  local keys = {
+    ["<C-x>"] = { "worktree_delete", mode = { "n", "i" }, desc = "Delete worktree (press twice)" },
+    ["<C-c>"] = { "cancel", mode = { "n", "i" } },
+  }
+  Snacks.picker.pick({
+    source = "worktrees",
+    title = "Git Worktrees",
+    layout = { preset = "select" },
+    main = { current = true },
+    finder = function() return items end,
+    format = function(item)
+      return {
+        { item.path == current_root and "* " or "  ", "PickerTitle" },
+        { item.label },
+        { "  " .. item.display_path, "SnacksPickerDir" },
+      }
+    end,
+    actions = { worktree_delete = delete_worktree },
+    win = { input = { keys = keys }, list = { keys = keys } },
+    on_change = function(_, item)
+      if pending and (not item or item.path ~= pending.path) then
+        pending = nil
+      end
+    end,
+    on_close = function()
+      pending = nil
+    end,
+    confirm = function(picker, item)
+      if deleting or not item then
+        return
+      end
+      if vim.fn.isdirectory(item.path) ~= 1 then
+        notice("Worktree directory is missing: " .. item.display_path, vim.log.levels.WARN)
+        if refresh() then
+          picker:refresh()
+        end
+        return
+      end
+      picker:close()
+      if item.path ~= current_root then
+        -- Let Snacks finish closing its buffers before syncing the editor.
+        vim.schedule(function()
+          vim.cmd.tcd(item.path)
+          vim.cmd.clearjumps()
+          sync_listed_buffers(current_root, item.path)
+        end)
+      end
+    end,
+  })
 end
 
 return M

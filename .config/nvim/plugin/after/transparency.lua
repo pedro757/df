@@ -56,14 +56,11 @@ local groups = {
 	"NotifyDEBUGBorder",
 }
 
--- The current line goes see-through too, leaving its number to mark it. The
--- file tree marks its selection with that line alone, so it keeps the colour.
+-- Keep the current-line color in the editor and the file tree.
 local cursorline = vim.api.nvim_get_hl(0, { name = "CursorLine", link = false })
 if cursorline.bg then
 	vim.api.nvim_set_hl(0, "NeoTreeCursorLine", { bg = cursorline.bg })
 end
-table.insert(groups, "CursorLine")
-
 for _, name in ipairs(groups) do
 	make_transparent(name)
 end

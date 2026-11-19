@@ -492,6 +492,14 @@ return {
       },
       picker = {
         enabled = true,
+        sources = {
+          select = {
+            win = {
+              input = { keys = { ["<C-c>"] = { "cancel", mode = { "n", "i" } } } },
+              list = { keys = { ["<C-c>"] = "cancel" } },
+            },
+          },
+        },
         win = {
           input = {
             keys = {
@@ -646,7 +654,8 @@ return {
     },
   },
   {
-    "waiting-for-dev/ergoterm.nvim",
+    "pedro757/ergoterm.nvim",
+    branch = "worktree-terminal-picker",
     config = function()
       require("ergoterm").setup({})
 
@@ -975,6 +984,11 @@ return {
       debug = {
         enabled = true,     -- we expect your collaboration at least during the beta
         show_scores = true, -- to help us optimize the scoring system, feel free to share your scores!
+      },
+      hl = {
+        cursor = "PickerCurrentRow",
+        border = "PickerBorder",
+        title = "PickerTitle",
       },
       keymaps = {
         close = { "<Esc>", "<C-c>" },

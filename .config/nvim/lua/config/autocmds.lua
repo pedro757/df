@@ -186,17 +186,23 @@ au("BufWritePre", {
 
 local OnlyOneCursorLine = aug("OnlyOneCursorLine", clear)
 
-au({ "WinEnter", "InsertLeave" }, {
-  callback = function()
-    vim.opt.cursorline = true
-  end,
+local function set_editor_cursorline(enabled)
+  return function()
+    -- Pickers manage their own current row, even while their input has focus.
+    local ft = vim.bo.filetype
+    if not vim.startswith(ft, "snacks_picker_") and ft ~= "harpoon" then
+      vim.wo.cursorline = enabled
+    end
+  end
+end
+
+au({ "WinEnter", "TermLeave" }, {
+  callback = set_editor_cursorline(true),
   group = OnlyOneCursorLine,
 })
 
-au({ "WinLeave", "InsertEnter" }, {
-  callback = function()
-    vim.opt.cursorline = false
-  end,
+au({ "WinLeave", "TermEnter" }, {
+  callback = set_editor_cursorline(false),
   group = OnlyOneCursorLine,
 })
 
@@ -244,6 +250,13 @@ cmd("DiffSaved", function()
   vim.fn.DiffWithSaved()
 end, {})
 cmd("Dotfiles", "call FugitiveDetect(expand('~/.dotfiles'))", {})
+-- Only bare :G opens the picker; preserve Fugitive's normal command syntax.
+vim.cmd([[
+  command! -bang -nargs=? -range=-1 -complete=customlist,fugitive#Complete G
+    \ if <bang>0 || +"<range>" || !empty("<mods>") || !empty(<q-args>)
+    \ | exe fugitive#Command(<line1>, <count>, +"<range>", <bang>0, "<mods>", <q-args>)
+    \ | else | execute 'lua require("config.fugitive").select_status()' | endif
+]])
 cmd("Worktree", function()
   require("config.worktree").open_menu()
 end, { desc = "Open git worktree menu" })

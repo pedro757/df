@@ -3,7 +3,7 @@
   "blink.cmp": { "branch": "main", "commit": "78336bc89ee5365633bcf754d93df01678b5c08f" },
   "blink.lib": { "branch": "main", "commit": "fd9a48ebbe6ec30d5dfcc5b42c243941ccdca1aa" },
   "blink.pairs": { "branch": "main", "commit": "c382bc4ba0229211c8ae19491bb7aa930c051a42" },
-  "ergoterm.nvim": { "branch": "main", "commit": "b0aca7e513b4da5faf4a7f35b71b3f07f5300f4b" },
+  "ergoterm.nvim": { "branch": "worktree-terminal-picker", "commit": "b2cae9a3dd73d4284ed6de70aa74ca7d1474b9e1" },
   "fff.nvim": { "branch": "main", "commit": "b35b96ad065aea26aafb73eac69fd4866f173b76" },
   "flash.nvim": { "branch": "main", "commit": "5f0f270fdc7c5b0c21d903ee85b9cb06f2ac636a" },
   "friendly-snippets": { "branch": "main", "commit": "b2ea5c41a150ba72fb656eedb4ed0a86d138d945" },
